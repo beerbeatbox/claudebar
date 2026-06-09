@@ -51,7 +51,7 @@ class UsageApi {
       return const UsageResult.fail(UsageError.expiredToken);
     }
     if (res.statusCode != 200) {
-      debugPrint('[ClaudeBar] usage endpoint ${res.statusCode}: ${res.body}');
+      debugPrint('[ClaudeBar] usage endpoint returned ${res.statusCode}');
       return const UsageResult.fail(UsageError.network);
     }
 
