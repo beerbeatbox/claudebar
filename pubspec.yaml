@@ -42,6 +42,9 @@ scripts:
   run: fvm flutter run -d macos
   clean: fvm flutter clean && fvm flutter pub get
   build: fvm flutter build macos --release
+  release:
+    $before: rps build
+    $script: open -R build/macos/Build/Products/Release/ClaudeBar.app
   analyze: fvm flutter analyze
 
 # For information on the generic Dart part of this file, see the
