@@ -3,8 +3,28 @@ import FlutterMacOS
 import Security
 
 class MainFlutterWindow: NSWindow {
+  // Menu-bar popover: keep the window non-opaque so only the rounded card drawn
+  // by Flutter shows. window_manager's `setAsFrameless()` hard-sets
+  // `isOpaque = true`, which over a clear background renders as a black box —
+  // so we force every write to `false` (a real `false` write is what actually
+  // reconfigures the backing surface to carry an alpha channel).
+  override var isOpaque: Bool {
+    get { super.isOpaque }
+    set { super.isOpaque = false }
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
+
+    // Transparent menu-bar popover. Per FlutterViewController.h, the FlutterView
+    // defaults to a BLACK background unless its `backgroundColor` is set to
+    // clear — that, plus a non-opaque clear window, is what lets the rounded
+    // card float over the desktop.
+    self.isOpaque = false
+    self.backgroundColor = .clear
+    self.hasShadow = false
+    flutterViewController.backgroundColor = .clear
+
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)

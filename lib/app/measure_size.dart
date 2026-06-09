@@ -1,33 +1,63 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-/// Reports its child's rendered size via [onChange] after each layout. Used to
-/// resize the frameless popover window to fit its content.
-class MeasureSize extends StatefulWidget {
-  final Widget child;
+/// Reports its child's *natural* height via [onChange] after each layout, used
+/// to resize the frameless popover window to fit its content.
+///
+/// Implemented as a render object (not a postframe callback in `build`) so it
+/// fires on **every** layout — including when only the child rebuilds, e.g. the
+/// usage data arriving via Riverpod. The child is measured with an unbounded
+/// height so the reported size never gets clamped to the current (smaller)
+/// window, which would otherwise leave the popover stuck clipped.
+class MeasureSize extends SingleChildRenderObjectWidget {
   final ValueChanged<Size> onChange;
 
-  const MeasureSize({super.key, required this.child, required this.onChange});
+  const MeasureSize({super.key, required this.onChange, required Widget child})
+    : super(child: child);
 
   @override
-  State<MeasureSize> createState() => _MeasureSizeState();
+  RenderObject createRenderObject(BuildContext context) =>
+      _MeasureSizeRender(onChange);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant RenderProxyBox renderObject,
+  ) {
+    (renderObject as _MeasureSizeRender).onChange = onChange;
+  }
 }
 
-class _MeasureSizeState extends State<MeasureSize> {
-  final _key = GlobalKey();
+class _MeasureSizeRender extends RenderProxyBox {
+  _MeasureSizeRender(this.onChange);
+
+  ValueChanged<Size> onChange;
   Size? _last;
 
   @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final size = _key.currentContext?.size;
-      if (size != null && size != _last) {
-        _last = size;
-        widget.onChange(size);
-      }
-    });
-    return Align(
-      alignment: Alignment.topCenter,
-      child: KeyedSubtree(key: _key, child: widget.child),
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    // Measure the child at its natural height (width still bound to the window),
+    // then size self clamped to the incoming constraints.
+    child.layout(
+      BoxConstraints(
+        minWidth: constraints.minWidth,
+        maxWidth: constraints.maxWidth,
+        minHeight: 0,
+        maxHeight: double.infinity,
+      ),
+      parentUsesSize: true,
     );
+    final natural = child.size;
+    size = constraints.constrain(natural);
+
+    if (_last != natural) {
+      _last = natural;
+      WidgetsBinding.instance.addPostFrameCallback((_) => onChange(natural));
+    }
   }
 }

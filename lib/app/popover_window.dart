@@ -8,7 +8,8 @@ import 'package:window_manager/window_manager.dart';
 /// position it under the status item, show/focus it, and hide it on blur
 /// (spec §6, §10 Phase 2).
 class PopoverWindow with WindowListener {
-  static const double width = 314;
+  // 300pt card + 22pt transparent padding on each side (room for the shadow).
+  static const double width = 344;
   double _height = 360;
 
   bool _ready = false;
@@ -78,7 +79,8 @@ class PopoverWindow with WindowListener {
     final visPos = display.visiblePosition ?? Offset.zero;
     final visSize = display.visibleSize ?? display.size;
 
-    const arrowFromRight = 37.0;
+    // Arrow centre = right padding (22) + Align right inset (24) + half-arrow (6).
+    const arrowFromRight = 52.0;
     double left = cursor.dx - (width - arrowFromRight);
     final minLeft = visPos.dx + 4;
     final maxLeft = visPos.dx + visSize.width - width - 4;

@@ -30,7 +30,9 @@ class _PopoverState extends ConsumerState<Popover> {
 
     return Container(
       color: const Color(0x00000000),
-      padding: const EdgeInsets.fromLTRB(7, 6, 7, 10),
+      // Generous padding so the card's drop-shadow can fade over the now
+      // transparent window instead of being clipped to a hard edge.
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -41,21 +43,35 @@ class _PopoverState extends ConsumerState<Popover> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: t.cardBorder, width: 0.5),
               boxShadow: const [
-                BoxShadow(color: Color(0x66000000), blurRadius: 32, offset: Offset(0, 14)),
+                BoxShadow(
+                  color: Color(0x73000000),
+                  blurRadius: 36,
+                  offset: Offset(0, 18),
+                ),
+                BoxShadow(
+                  color: Color(0x40000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
               ],
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-              child: _showSettings
-                  ? SettingsPanel(
-                      onBack: () => setState(() => _showSettings = false),
-                      onQuit: widget.onQuit,
-                    )
-                  : _UsageView(
-                      state: state,
-                      onRefresh: () => ref.read(usageControllerProvider.notifier).refresh(),
-                      onSettings: () => setState(() => _showSettings = true),
-                    ),
+              child:
+                  _showSettings
+                      ? SettingsPanel(
+                        onBack: () => setState(() => _showSettings = false),
+                        onQuit: widget.onQuit,
+                      )
+                      : _UsageView(
+                        state: state,
+                        onRefresh:
+                            () =>
+                                ref
+                                    .read(usageControllerProvider.notifier)
+                                    .refresh(),
+                        onSettings: () => setState(() => _showSettings = true),
+                      ),
             ),
           ),
         ],
@@ -112,7 +128,11 @@ class _UsageView extends StatelessWidget {
           if (snapshot.stale) _OfflineRow(t: t),
           MeterRow(window: snapshot.session, stale: snapshot.stale),
           const SizedBox(height: 16),
-          MeterRow(window: snapshot.weekly, colorize: false, stale: snapshot.stale),
+          MeterRow(
+            window: snapshot.weekly,
+            colorize: false,
+            stale: snapshot.stale,
+          ),
           if (snapshot.opus != null || snapshot.sonnet != null) ...[
             Divider(color: t.hairline, height: 28, thickness: 0.5),
             if (snapshot.opus != null) MiniMeterRow(window: snapshot.opus!),
@@ -143,7 +163,11 @@ class _UsageView extends StatelessWidget {
                   busy: state.loading,
                 ),
                 const SizedBox(width: 4),
-                _FootBtn(icon: Icons.settings_outlined, onTap: onSettings, t: t),
+                _FootBtn(
+                  icon: Icons.settings_outlined,
+                  onTap: onSettings,
+                  t: t,
+                ),
               ],
             ),
           ],
@@ -202,12 +226,19 @@ class _StatusBody extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(color: t.amber, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: t.amber,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 9),
               Text(
                 error.title,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: t.text1),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: t.text1,
+                ),
               ),
             ],
           ),
@@ -238,7 +269,10 @@ class _LoadingBody extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2, color: t.text3),
           ),
           const SizedBox(width: 10),
-          Text('Reading usage…', style: TextStyle(fontSize: 12, color: t.text2)),
+          Text(
+            'Reading usage…',
+            style: TextStyle(fontSize: 12, color: t.text2),
+          ),
         ],
       ),
     );
@@ -294,18 +328,22 @@ class _Arrow extends StatelessWidget {
       alignment: Alignment.centerRight,
       child: Padding(
         padding: const EdgeInsets.only(right: 24),
-        child: Transform.rotate(
-          angle: 0.785398, // 45°
-          child: Container(
-            width: 12,
-            height: 12,
-            margin: const EdgeInsets.only(bottom: -6),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(3),
-              border: Border(
-                top: BorderSide(color: border, width: 0.5),
-                left: BorderSide(color: border, width: 0.5),
+        child: Transform.translate(
+          // Pull the arrow down so its flat edge tucks behind the card seam.
+          // (A negative Container margin would trip Flutter's isNonNegative assert.)
+          offset: const Offset(0, 6),
+          child: Transform.rotate(
+            angle: 0.785398, // 45°
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(3),
+                border: Border(
+                  top: BorderSide(color: border, width: 0.5),
+                  left: BorderSide(color: border, width: 0.5),
+                ),
               ),
             ),
           ),
