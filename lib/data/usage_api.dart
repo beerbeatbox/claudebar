@@ -71,10 +71,10 @@ class UsageApi {
   }
 
   UsageSnapshot _parse(Map<String, dynamic> json, ClaudeCredentials creds) {
-    final session = _window(json['five_hour'], 'Session') ??
-        const UsageWindow(percent: 0, label: 'Session');
-    final weekly = _window(json['seven_day'], 'Weekly') ??
-        const UsageWindow(percent: 0, label: 'Weekly');
+    final session = _window(json['five_hour'], 'Session · 5h') ??
+        const UsageWindow(percent: 0, label: 'Session · 5h');
+    final weekly = _window(json['seven_day'], 'Weekly · 7d') ??
+        const UsageWindow(percent: 0, label: 'Weekly · 7d');
     final opus = _window(json['seven_day_opus'], 'Opus · weekly');
     final sonnet = _window(json['seven_day_sonnet'], 'Sonnet · weekly');
 
