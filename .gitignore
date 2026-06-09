@@ -1,0 +1,266 @@
+# ================================
+# Flutter Project Root .gitignore
+# ================================
+
+# ===================
+# Miscellaneous
+# ===================
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# ===================
+# IDEs and Editors
+# ===================
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ===================
+# Flutter/Dart/Pub
+# ===================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+pubspec.lock  # Uncomment if you want to track lock file: !pubspec.lock
+
+# Generated Dart files
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.chopper.dart
+*.mocks.dart
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# ===================
+# Android
+# ===================
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/.cxx/
+
+# Signing keys (NEVER commit these!)
+**/android/key.properties
+**/android/**/*.keystore
+**/android/**/*.jks
+**/android/app/google-services.json
+
+# ===================
+# iOS
+# ===================
+**/ios/**/dgph
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/.sconsign.dblite
+**/ios/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/**/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Firebase
+**/ios/Runner/GoogleService-Info.plist
+**/ios/firebase_app_id_file.json
+
+# ===================
+# macOS
+# ===================
+**/macos/Flutter/ephemeral/
+**/macos/**/Pods/
+**/macos/**/dgph
+**/macos/**/xcuserdata/
+**/macos/**/*.moved-aside
+**/macos/**/DerivedData/
+**/macos/**/.symlinks/
+
+# ===================
+# Linux
+# ===================
+**/linux/flutter/ephemeral/
+
+# ===================
+# Windows
+# ===================
+**/windows/flutter/ephemeral/
+
+# Visual Studio user-specific files
+**/windows/**/*.suo
+**/windows/**/*.user
+**/windows/**/*.userosscache
+**/windows/**/*.sln.docstates
+
+# Visual Studio build-related files
+**/windows/**/x64/
+**/windows/**/x86/
+**/windows/**/Debug/
+**/windows/**/Release/
+
+# Visual Studio cache files
+**/windows/**/*.[Cc]ache
+!**/windows/**/*.[Cc]ache/
+
+# ===================
+# Web
+# ===================
+**/web/.dart_tool/
+
+# ===================
+# FVM (Flutter Version Management)
+# ===================
+
+# ===================
+# Environment & Secrets
+# ===================
+# Environment files (customize based on your setup)
+.env
+.env.*
+!.env.example
+*.env
+
+# Secret/API keys
+secrets.dart
+**/secrets/
+*.pem
+*.p12
+*.key
+
+# ===================
+# Testing & Coverage
+# ===================
+coverage/
+*.lcov
+.test_coverage/
+test_coverage/
+
+# ===================
+# Build Outputs
+# ===================
+*.apk
+*.aab
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# ===================
+# Fastlane
+# ===================
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+**/fastlane/readme.md
+
+# ===================
+# Other
+# ===================
+# Freezed/json_serializable lock files
+*.lock
+!pubspec.lock
+
+# Crashlytics
+crashlytics-build.properties
+crashlytics.properties
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+
+# Local configuration
+local.properties
+*.local.dart
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Analysis
+pana_report.json
+
+# Documentation (generated)
+doc/api/
+
+# Design mockups (local HTML prototypes — not part of the app)
+mockups/
+
+# Cursor IDE
+.cursor/
+!.cursor/rules/
+
+# FVM Version Cache
+.fvm/

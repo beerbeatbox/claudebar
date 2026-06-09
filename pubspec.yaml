@@ -1,0 +1,50 @@
+name: claude_usage_bar
+description: "ClaudeBar — a macOS menu-bar app that shows your Claude usage as a live percentage."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management (house style — same as zen & aloud)
+  flutter_riverpod: ^3.0.3
+
+  # macOS menu-bar / window plumbing
+  tray_manager: ^0.5.0
+  window_manager: ^0.5.0
+  screen_retriever: ^0.2.0
+  launch_at_startup: ^0.5.1
+
+  # Persistence, networking, formatting
+  shared_preferences: ^2.3.2
+  http: ^1.2.2
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  rps: ^0.7.0
+
+# RPS Scripts - run with: rps <script_path>
+scripts:
+  pub:
+    get: fvm flutter pub get
+    upgrade: fvm flutter pub upgrade
+  run: fvm flutter run -d macos
+  clean: fvm flutter clean && fvm flutter pub get
+  build: fvm flutter build macos --release
+  analyze: fvm flutter analyze
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+flutter:
+  uses-material-design: true
