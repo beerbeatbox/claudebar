@@ -15,8 +15,9 @@ import '../ui/tokens.dart';
 import 'popover_window.dart';
 import 'tray_glyph.dart';
 
-/// Drives the menu-bar status item: the live `%` title plus a context menu,
-/// reacting to changes in the shared [UsageController] (spec §4, Phase 1).
+/// Drives the menu-bar status item: a ring gauge for the usage % with the
+/// reset countdown as its title, plus a context menu, reacting to changes in
+/// the shared [UsageController] (spec §4, Phase 1).
 class TrayController with TrayListener {
   TrayController({required this.container, required this.popover});
 
@@ -40,34 +41,33 @@ class TrayController with TrayListener {
     container.listen(settingsProvider, (_, __) => _rebuild(), fireImmediately: false);
 
     // The title carries a minute-granular reset countdown, so tick it along
-    // between refreshes (design mockup variant A: "42% · 2h14m").
+    // between refreshes (design mockup variant G: ring + "2h14m").
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _rebuild());
   }
 
   Future<void> _rebuild() async {
     final state = container.read(usageControllerProvider);
     final settings = container.read(settingsProvider);
-    await _updateGlyph(state);
+    await _updateGlyph(state, settings.metric);
     await trayManager.setTitle(_title(state, settings.metric));
     await trayManager.setContextMenu(_menu(state));
   }
 
-  /// Draws the two-bar meter glyph for the current usage and installs it as the
-  /// status-item image (design reference §"The status item").
-  Future<void> _updateGlyph(UsageState state) async {
+  /// Draws the ring gauge for the selected window and installs it as the
+  /// status-item image (design mockup variant G — "Ring + countdown").
+  Future<void> _updateGlyph(UsageState state, MenuBarMetric metric) async {
     final dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
         Brightness.dark;
     final t = dark ? ClaudeTokens.dark : ClaudeTokens.light;
     final snapshot = state.snapshot;
     final stale = snapshot?.stale ?? false;
-    final session = snapshot?.session.percent ?? 0;
-    final weekly = snapshot?.weekly.percent ?? 0;
+    final window =
+        metric == MenuBarMetric.weekly ? snapshot?.weekly : snapshot?.session;
+    final percent = window?.percent ?? 0;
 
     final png = await renderTrayGlyph(
-      sessionPercent: session,
-      weeklyPercent: weekly,
-      sessionColor: stale ? t.text3 : levelColor(session, t),
-      weeklyColor: stale ? t.text3 : t.accent,
+      percent: percent,
+      color: stale ? t.text3 : levelColor(percent, t),
       // The menu bar sits over the wallpaper, so the track needs a touch more
       // contrast than the in-popover token.
       track: dark ? const Color(0x4DFFFFFF) : const Color(0x33000000),
@@ -87,9 +87,9 @@ class TrayController with TrayListener {
     final snapshot = state.snapshot;
     if (snapshot != null) {
       final window = metric == MenuBarMetric.weekly ? snapshot.weekly : snapshot.session;
-      final countdown = Fmt.countdownShort(window.resetsAt);
-      final pct = Fmt.pct(window.percent);
-      return countdown == null ? pct : '$pct · $countdown';
+      // The % lives in the ring, so the title carries just the countdown
+      // (variant G), falling back to the % when there's no reset time yet.
+      return Fmt.countdownShort(window.resetsAt) ?? Fmt.pct(window.percent);
     }
     if (state.error != null) return state.error!.menuBarLabel;
     return '--%';

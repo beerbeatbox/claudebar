@@ -1,47 +1,55 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
-/// Renders the menu-bar status glyph to PNG bytes — a two-bar meter where the
-/// thick top bar tracks the 5-hour session and the bottom hairline tracks the
-/// week, matching the `.glyph` spec in claudebar-design-reference.html.
+/// Renders the menu-bar status glyph to PNG bytes — a small ring gauge whose
+/// arc tracks the selected usage window, matching variant G ("Ring +
+/// countdown") in claudebarbarmockups.html.
 ///
 /// tray_manager's Dart `setIcon` only loads bundled assets, so the glyph is
 /// drawn at runtime and handed to the native side as base64 (see TrayController).
 Future<Uint8List> renderTrayGlyph({
-  required double sessionPercent,
-  required double weeklyPercent,
-  required Color sessionColor,
-  required Color weeklyColor,
+  required double percent,
+  required Color color,
   required Color track,
   double scale = 3,
 }) async {
-  // Logical 18×18pt icon; the glyph is 17pt wide / 10pt tall, centered.
+  // Logical 18×18pt icon; the ring is 16pt across including its stroke
+  // (r=6 + 2.6pt stroke), centered — same proportions as the mockup's SVG.
   const double box = 18;
-  const double glyphW = 17;
-  const double topH = 5, gap = 3, botH = 2;
-  const double glyphH = topH + gap + botH; // 10
-  final double left = (box - glyphW) / 2;
-  final double top = (box - glyphH) / 2;
+  const double radius = 6;
+  const double stroke = 2.6;
+  const center = Offset(box / 2, box / 2);
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.scale(scale);
 
-  void bar(double y, double h, double pct, Color fill) {
-    final radius = Radius.circular(h < 4 ? h / 2 : 2);
-    final trackRect = RRect.fromLTRBR(left, y, left + glyphW, y + h, radius);
-    canvas.drawRRect(trackRect, Paint()..color = track);
-    final w = glyphW * (pct.clamp(0, 100) / 100);
-    if (w > 0.5) {
-      final fillRect = RRect.fromLTRBR(left, y, left + w, y + h, radius);
-      canvas.drawRRect(fillRect, Paint()..color = fill);
-    }
-  }
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = track,
+  );
 
-  bar(top, topH, sessionPercent, sessionColor);
-  bar(top + topH + gap, botH, weeklyPercent, weeklyColor);
+  final sweep = 2 * math.pi * (percent.clamp(0, 100) / 100);
+  if (sweep > 0.01) {
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2, // start at 12 o'clock, like the mockup's rotate(-90)
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+  }
 
   final picture = recorder.endRecording();
   final side = (box * scale).round();
