@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,7 +15,12 @@ import 'tokens.dart';
 /// between the usage view, status states, and settings (design reference).
 class Popover extends ConsumerStatefulWidget {
   final VoidCallback onQuit;
-  const Popover({super.key, required this.onQuit});
+
+  /// Arrow-centre distance from the window's right edge, driven by the window
+  /// positioner so the arrow tracks the status item.
+  final ValueListenable<double> arrowFromRight;
+
+  const Popover({super.key, required this.onQuit, required this.arrowFromRight});
 
   @override
   ConsumerState<Popover> createState() => _PopoverState();
@@ -30,51 +36,43 @@ class _PopoverState extends ConsumerState<Popover> {
 
     return Container(
       color: const Color(0x00000000),
-      // Generous padding so the card's drop-shadow can fade over the now
-      // transparent window instead of being clipped to a hard edge.
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Arrow(color: t.cardBg, border: t.cardBorder),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: t.cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: t.cardBorder, width: 0.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x73000000),
-                  blurRadius: 36,
-                  offset: Offset(0, 18),
-                ),
-                BoxShadow(
-                  color: Color(0x40000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
+      // Side/bottom padding must outrun the shadow: the 36-blur shadow stays
+      // visible for ~2 sigma (~42pt) past the card edge, plus the 18pt
+      // downward offset at the bottom — anything tighter clips the fade into
+      // a hard rectangle. Top is 0 so the arrow tip touches the window's top
+      // edge, which the positioner pins right under the menu bar.
+      padding: const EdgeInsets.fromLTRB(40, 0, 40, 64),
+      child: ValueListenableBuilder<double>(
+        valueListenable: widget.arrowFromRight,
+        builder:
+            (context, fromRight, child) => CustomPaint(
+              painter: _BubblePainter(
+                color: t.cardBg,
+                border: t.cardBorder,
+                // fromRight measures from the window edge; the painter works
+                // in card coordinates, inside the 40pt transparent gutter.
+                arrowCenterFromRight: fromRight - 40,
+              ),
+              child: child,
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-              child:
-                  _showSettings
-                      ? SettingsPanel(
-                        onBack: () => setState(() => _showSettings = false),
-                        onQuit: widget.onQuit,
-                      )
-                      : _UsageView(
-                        state: state,
-                        onRefresh:
-                            () =>
-                                ref
-                                    .read(usageControllerProvider.notifier)
-                                    .refresh(),
-                        onSettings: () => setState(() => _showSettings = true),
-                      ),
-            ),
-          ),
-        ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, _kArrowHeight + 16, 18, 14),
+          child:
+              _showSettings
+                  ? SettingsPanel(
+                    onBack: () => setState(() => _showSettings = false),
+                    onQuit: widget.onQuit,
+                  )
+                  : _UsageView(
+                    state: state,
+                    onRefresh:
+                        () =>
+                            ref
+                                .read(usageControllerProvider.notifier)
+                                .refresh(),
+                    onSettings: () => setState(() => _showSettings = true),
+                  ),
+        ),
       ),
     );
   }
@@ -315,40 +313,86 @@ class _FootBtn extends StatelessWidget {
   }
 }
 
-/// The little up-pointing arrow above the card, near the right where macOS
-/// menu-bar items live.
-class _Arrow extends StatelessWidget {
+/// Height of the up-pointing arrow above the card's top edge.
+const double _kArrowHeight = 8;
+
+/// Half-width of the arrow at its base.
+const double _kArrowHalfWidth = 9;
+
+/// Paints the card and its up-pointing arrow as one continuous path — single
+/// fill, single hairline stroke, single shadow — so no seam can appear where
+/// they meet. The arrow centre is [arrowCenterFromRight] from the card's
+/// right edge, kept under the status item by the window positioner.
+class _BubblePainter extends CustomPainter {
   final Color color;
   final Color border;
-  const _Arrow({required this.color, required this.border});
+  final double arrowCenterFromRight;
+
+  const _BubblePainter({
+    required this.color,
+    required this.border,
+    required this.arrowCenterFromRight,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 24),
-        child: Transform.translate(
-          // Pull the arrow down so its flat edge tucks behind the card seam.
-          // (A negative Container margin would trip Flutter's isNonNegative assert.)
-          offset: const Offset(0, 6),
-          child: Transform.rotate(
-            angle: 0.785398, // 45°
-            child: Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(3),
-                border: Border(
-                  top: BorderSide(color: border, width: 0.5),
-                  left: BorderSide(color: border, width: 0.5),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+  void paint(Canvas canvas, Size size) {
+    final path = _bubblePath(size);
+
+    canvas.drawPath(
+      path.shift(const Offset(0, 18)),
+      Paint()
+        ..color = const Color(0x73000000)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, _sigma(36)),
+    );
+    canvas.drawPath(
+      path.shift(const Offset(0, 2)),
+      Paint()
+        ..color = const Color(0x40000000)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, _sigma(8)),
+    );
+
+    canvas.drawPath(path, Paint()..color = color);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.5,
     );
   }
+
+  Path _bubblePath(Size size) {
+    const r = Radius.circular(14);
+    const top = _kArrowHeight;
+    final w = size.width;
+    final h = size.height;
+    final cx = w - arrowCenterFromRight;
+
+    return Path()
+      ..moveTo(14, top)
+      ..lineTo(cx - _kArrowHalfWidth, top)
+      // Slightly rounded tip instead of a sharp point.
+      ..lineTo(cx - 1.5, 1.33)
+      ..quadraticBezierTo(cx, 0, cx + 1.5, 1.33)
+      ..lineTo(cx + _kArrowHalfWidth, top)
+      ..lineTo(w - 14, top)
+      ..arcToPoint(Offset(w, top + 14), radius: r)
+      ..lineTo(w, h - 14)
+      ..arcToPoint(Offset(w - 14, h), radius: r)
+      ..lineTo(14, h)
+      ..arcToPoint(Offset(0, h - 14), radius: r)
+      ..lineTo(0, top + 14)
+      ..arcToPoint(const Offset(14, top), radius: r)
+      ..close();
+  }
+
+  /// Matches BoxShadow's blur-radius-to-sigma conversion so the shadow looks
+  /// identical to the previous DecoratedBox version.
+  static double _sigma(double blurRadius) => blurRadius * 0.57735 + 0.5;
+
+  @override
+  bool shouldRepaint(_BubblePainter old) =>
+      old.color != color ||
+      old.border != border ||
+      old.arrowCenterFromRight != arrowCenterFromRight;
 }

@@ -73,7 +73,7 @@ class ClaudeBarApp extends StatelessWidget {
         type: MaterialType.transparency,
         child: MeasureSize(
           onChange: (size) => _popover.setContentHeight(size.height),
-          child: Popover(onQuit: quitApp),
+          child: Popover(onQuit: quitApp, arrowFromRight: _popover.arrowFromRight),
         ),
       ),
     );
