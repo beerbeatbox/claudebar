@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -9,6 +10,14 @@ import 'package:window_manager/window_manager.dart';
 /// position it under the status item, show/focus it, and hide it on blur
 /// (spec §6, §10 Phase 2).
 class PopoverWindow with WindowListener {
+  /// Native show/hide that never calls `NSApp.activate` — window_manager's
+  /// `show()`/`focus()` activate the whole app, which steals keyboard focus
+  /// from the frontmost app and leaves this windowless agent app active after
+  /// the popover hides (dead keyboard + flickering cursor system-wide). The
+  /// panel is a `.nonactivatingPanel`, so ordering it front takes key status
+  /// without activating, and ordering it out hands key straight back.
+  static const MethodChannel _panelChannel = MethodChannel('claudebar/popover');
+
   // 300pt card + 40pt transparent padding on each side, sized so the 36pt
   // shadow blur fades to nothing before reaching the window edge (a smaller
   // gutter clips the blur into a visible hard rectangle).
@@ -76,10 +85,17 @@ class PopoverWindow with WindowListener {
     }
   }
 
+  /// When the click on the status item makes the panel resign key first, the
+  /// blur handler hides it before [toggle] runs and the toggle would re-show
+  /// it — so a tray click could never close the popover. A hide this recent
+  /// means the click that's now toggling is the one that caused the blur.
+  DateTime _blurHiddenAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   Future<void> toggle() async {
     if (await windowManager.isVisible()) {
-      await windowManager.hide();
-    } else {
+      await hide();
+    } else if (DateTime.now().difference(_blurHiddenAt) >
+        const Duration(milliseconds: 300)) {
       await show();
     }
   }
@@ -87,11 +103,10 @@ class PopoverWindow with WindowListener {
   Future<void> show() async {
     _anchorX = await _resolveAnchorX();
     await _position();
-    await windowManager.show();
-    await windowManager.focus();
+    await _panelChannel.invokeMethod('show');
   }
 
-  Future<void> hide() => windowManager.hide();
+  Future<void> hide() => _panelChannel.invokeMethod('hide');
 
   /// The status item's horizontal centre, falling back to the cursor (the
   /// click that opened us) when the tray bounds are unavailable.
@@ -140,6 +155,7 @@ class PopoverWindow with WindowListener {
 
   @override
   void onWindowBlur() {
-    windowManager.hide();
+    _blurHiddenAt = DateTime.now();
+    hide();
   }
 }
