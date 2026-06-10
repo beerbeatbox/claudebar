@@ -53,6 +53,7 @@ scripts:
   dist:
     $before: rps build
     $script: ./scripts/make_dmg.sh
+  ship: ./scripts/release_dmg.sh
   analyze: fvm flutter analyze
 
 # For information on the generic Dart part of this file, see the
