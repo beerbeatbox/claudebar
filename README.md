@@ -29,10 +29,26 @@ rps pub get      # fvm flutter pub get
 rps run          # fvm flutter run -d macos
 rps analyze      # fvm flutter analyze
 rps build        # fvm flutter build macos --release
+rps dist         # rps build + package a drag-to-/Applications DMG
 rps clean        # fvm flutter clean && pub get
 ```
 
 Or directly: `fvm flutter run -d macos`.
+
+### DMG installer
+
+`rps dist` builds the release app and packages it as
+`build/dist/ClaudeBar-<version>.dmg` — the classic installer window where you
+drag the app icon onto the `/Applications` folder. For the styled window
+(icon positions, drop link) install [`create-dmg`](https://github.com/create-dmg/create-dmg)
+first:
+
+```bash
+brew install create-dmg
+```
+
+Without it the script falls back to plain `hdiutil`: the DMG still contains
+the app plus an `/Applications` symlink, just with Finder's default layout.
 
 ### First-run Keychain prompt
 
