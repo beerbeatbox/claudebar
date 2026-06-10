@@ -43,7 +43,7 @@ class UsageApi {
         'anthropic-beta': 'oauth-2025-04-20',
       }).timeout(const Duration(seconds: 15));
     } catch (e) {
-      debugPrint('[ClaudeBar] usage fetch failed: $e');
+      debugPrint('[ClaudeBar] usage fetch failed (${e.runtimeType})');
       return const UsageResult.fail(UsageError.network);
     }
 
@@ -65,7 +65,7 @@ class UsageApi {
       final json = jsonDecode(res.body) as Map<String, dynamic>;
       return UsageResult.ok(_parse(json, creds));
     } catch (e) {
-      debugPrint('[ClaudeBar] usage parse failed: $e');
+      debugPrint('[ClaudeBar] usage parse failed (${e.runtimeType})');
       return const UsageResult.fail(UsageError.network);
     }
   }

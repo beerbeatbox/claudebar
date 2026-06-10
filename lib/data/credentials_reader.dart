@@ -40,7 +40,11 @@ class CredentialsReader {
     try {
       json = jsonDecode(raw) as Map<String, dynamic>;
     } catch (e) {
-      debugPrint('[ClaudeBar] failed to decode credentials JSON: $e');
+      // Log only the exception *type*: a FormatException from jsonDecode
+      // embeds a slice of the source string — here the raw credential JSON,
+      // which holds the access/refresh tokens — in its message, and
+      // debugPrint is NOT stripped from release builds.
+      debugPrint('[ClaudeBar] failed to decode credentials JSON (${e.runtimeType})');
       return const CredentialsResult.fail(UsageError.noCredentials);
     }
 
@@ -66,7 +70,7 @@ class CredentialsReader {
     try {
       if (await file.exists()) return await file.readAsString();
     } catch (e) {
-      debugPrint('[ClaudeBar] failed to read credentials file: $e');
+      debugPrint('[ClaudeBar] failed to read credentials file (${e.runtimeType})');
     }
     return null;
   }
