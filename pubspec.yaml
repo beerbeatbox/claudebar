@@ -45,6 +45,9 @@ scripts:
   release:
     $before: rps build
     $script: open -R build/macos/Build/Products/Release/ClaudeBar.app
+  dist:
+    $before: rps build
+    $script: ./scripts/make_dmg.sh
   analyze: fvm flutter analyze
 
 # For information on the generic Dart part of this file, see the
