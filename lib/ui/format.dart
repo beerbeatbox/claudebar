@@ -21,6 +21,21 @@ class Fmt {
     return 'Resets ${DateFormat('EEE HH:mm').format(resetsAt)}';
   }
 
+  /// Compact countdown for the menu-bar title — "2h05m", "45m", or "3d4h"
+  /// for far-off (weekly) resets. Null when there's no reset time; "soon"
+  /// once the reset moment has passed but a fresh snapshot hasn't landed.
+  static String? countdownShort(DateTime? resetsAt, {DateTime? now}) {
+    if (resetsAt == null) return null;
+    final diff = resetsAt.difference(now ?? DateTime.now());
+
+    if (diff.isNegative) return 'soon';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h${(diff.inMinutes % 60).toString().padLeft(2, '0')}m';
+    }
+    return '${diff.inDays}d${diff.inHours % 24}h';
+  }
+
   /// "Updated 14:32".
   static String updated(DateTime when) => 'Updated ${DateFormat('HH:mm').format(when)}';
 

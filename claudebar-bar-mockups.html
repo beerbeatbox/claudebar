@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeBar — Menu Bar Item Mockups (Session 5H + Reset countdown)</title>
+<style>
+  /* Companion to claudebar-design-reference.html — explores status-item
+     layouts that surface the 5-hour session % AND the reset countdown. */
+
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+            "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --thresh-warn: 75;
+    --thresh-crit: 90;
+  }
+
+  html[data-theme="dark"] {
+    --wall:
+      radial-gradient(120% 90% at 78% -10%, #4a3a86 0%, rgba(74,58,134,0) 55%),
+      radial-gradient(120% 100% at 10% 110%, #5d3f6b 0%, rgba(93,63,107,0) 50%),
+      linear-gradient(160deg, #241d49 0%, #181530 55%, #120f24 100%);
+    --page-bg: #0d0b18;
+    --menubar-bg: rgba(18,18,24,0.5);
+    --menubar-text: rgba(255,255,255,0.82);
+    --menubar-text-dim: rgba(255,255,255,0.46);
+    --cb-open-bg: rgba(255,255,255,0.16);
+    --track: rgba(255,255,255,0.20);
+    --hairline: rgba(255,255,255,0.10);
+    --accent: #E68A5C;
+    --amber:  #F0B43C;
+    --red:    #F2645F;
+    --chip-bg: rgba(28,28,34,0.66);
+    --chip-border: rgba(255,255,255,0.12);
+    --doc-text: rgba(255,255,255,0.62);
+    --doc-text-strong: rgba(255,255,255,0.9);
+    --card-label: rgba(255,255,255,0.5);
+    --text-1: rgba(255,255,255,0.95);
+    --text-2: rgba(255,255,255,0.56);
+    --pop-bg: rgba(30,30,35,0.62);
+  }
+
+  html[data-theme="light"] {
+    --wall:
+      radial-gradient(120% 90% at 80% -10%, #cfe0ff 0%, rgba(207,224,255,0) 55%),
+      radial-gradient(120% 100% at 6% 110%, #ffe2cf 0%, rgba(255,226,207,0) 55%),
+      linear-gradient(160deg, #eaf0fb 0%, #f2eef0 60%, #efe9e4 100%);
+    --page-bg: #e9edf5;
+    --menubar-bg: rgba(255,255,255,0.55);
+    --menubar-text: rgba(0,0,0,0.82);
+    --menubar-text-dim: rgba(0,0,0,0.46);
+    --cb-open-bg: rgba(0,0,0,0.10);
+    --track: rgba(0,0,0,0.14);
+    --hairline: rgba(0,0,0,0.08);
+    --accent: #C45B36;
+    --amber:  #B6790E;
+    --red:    #CE3A40;
+    --chip-bg: rgba(255,255,255,0.72);
+    --chip-border: rgba(0,0,0,0.08);
+    --doc-text: rgba(0,0,0,0.6);
+    --doc-text-strong: rgba(0,0,0,0.86);
+    --card-label: rgba(0,0,0,0.5);
+    --text-1: rgba(0,0,0,0.88);
+    --text-2: rgba(0,0,0,0.5);
+    --pop-bg: rgba(247,247,249,0.74);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    background: var(--page-bg);
+    color: var(--doc-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+  /* ---- sticky control chip ---- */
+  .controls {
+    position: sticky; top: 12px; z-index: 9;
+    margin: 16px auto 0; width: fit-content; max-width: calc(100% - 32px);
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: center;
+    padding: 10px 16px;
+    background: var(--chip-bg);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6);
+    backdrop-filter: blur(30px) saturate(1.6);
+    border: 0.5px solid var(--chip-border);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    color: var(--doc-text-strong);
+  }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--track); border-radius: 9px; }
+  .seg button {
+    font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--text-2);
+    border: none; background: transparent; cursor: pointer; padding: 4px 12px; border-radius: 7px;
+  }
+  .seg button[aria-pressed="true"] { color: var(--text-1); background: var(--pop-bg); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+  .slider-wrap { display: flex; align-items: center; gap: 11px; }
+  .slider-wrap .cap {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-2); white-space: nowrap;
+  }
+  .slider-wrap .live { font-size: 13px; width: 52px; text-align: right; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 130px; height: 4px; border-radius: 999px;
+    background: var(--track); outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 999px;
+    background: #fff; border: 0.5px solid rgba(0,0,0,0.2); box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 999px; border: 0.5px solid rgba(0,0,0,0.2);
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* ---- doc shell ---- */
+  .doc { max-width: 1060px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 6px;
+  }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--doc-text-strong); margin: 0 0 6px; }
+  .lede { font-size: 14px; line-height: 1.5; max-width: 64ch; margin: 0 0 30px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 20px; }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    border: 0.5px solid var(--hairline); border-radius: 14px; overflow: hidden;
+    background: color-mix(in srgb, var(--page-bg) 60%, transparent);
+  }
+  .card.reco { border-color: var(--accent); }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 16px 0; }
+  .card-head .name { font-size: 14px; font-weight: 600; color: var(--doc-text-strong); }
+  .card-head .tag {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--accent);
+    border: 0.5px solid var(--accent); border-radius: 6px; padding: 2px 7px; white-space: nowrap;
+  }
+  .card .desc { font-size: 12.5px; line-height: 1.5; padding: 4px 16px 12px; margin: 0; }
+  .card .meta { font-size: 11px; color: var(--card-label); padding: 0 16px 14px; }
+  .card .meta b { color: var(--doc-text-strong); font-weight: 600; }
+
+  /* ---- mini menu bar stage ---- */
+  .stagebar { background: var(--wall); padding: 26px 0 30px; }
+  .menubar {
+    height: 30px; display: flex; align-items: center; justify-content: flex-end;
+    gap: 14px; padding: 0 12px;
+    background: var(--menubar-bg);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    backdrop-filter: blur(24px) saturate(1.6);
+    border-top: 0.5px solid var(--hairline);
+    border-bottom: 0.5px solid var(--hairline);
+    font-size: 13px; color: var(--menubar-text);
+  }
+  .menubar .sysicon { width: 17px; height: 17px; opacity: 0.82; display: block; }
+  .menubar .clock { white-space: nowrap; color: var(--menubar-text); }
+
+  /* ---- the status item itself ---- */
+  .cb-item {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 22px; padding: 0 7px; border-radius: 6px;
+    color: var(--menubar-text); cursor: default; white-space: nowrap;
+  }
+  .cb-item .t { font-size: 13px; letter-spacing: 0.01em; }
+  .cb-item .dim { color: var(--menubar-text-dim); }
+  .cb-item .lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--menubar-text-dim); }
+
+  /* two-bar glyph (current) */
+  .glyph { width: 17px; display: flex; flex-direction: column; gap: 3px; flex: none; }
+  .glyph .bar { border-radius: 2px; background: var(--track); position: relative; overflow: hidden; }
+  .glyph .g-top { height: 5px; }
+  .glyph .g-bot { height: 2px; }
+  .glyph .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--meter, var(--accent)); transition: width .25s ease; }
+
+  /* stacked two-line text */
+  .stack { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; gap: 2px; }
+  .stack .s1 { font-size: 11px; font-weight: 600; }
+  .stack .s2 { font-size: 9px; color: var(--menubar-text-dim); letter-spacing: 0.02em; }
+
+  /* capsule pill with usage fill behind the text */
+  .pill {
+    position: relative; display: inline-flex; align-items: center; gap: 5px;
+    height: 17px; padding: 0 8px; border-radius: 999px;
+    background: var(--track); overflow: hidden;
+  }
+  .pill .pfill {
+    position: absolute; inset: 0 auto 0 0; border-radius: 999px;
+    background: color-mix(in srgb, var(--meter, var(--accent)) 38%, transparent);
+    transition: width .25s ease;
+  }
+  .pill .t { position: relative; font-size: 11px; font-weight: 600; }
+  .pill .dim { position: relative; font-size: 11px; }
+
+  /* ring glyph */
+  .ring { width: 16px; height: 16px; flex: none; }
+  .ring .bg { stroke: var(--track); }
+  .ring .fg { stroke: var(--meter, var(--accent)); transition: stroke-dashoffset .25s ease; }
+
+  footer.note { margin-top: 36px; font-size: 12px; line-height: 1.6; max-width: 70ch; }
+  footer.note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <div class="seg" role="group" aria-label="Theme">
+    <button id="btn-dark" aria-pressed="true">Dark</button>
+    <button id="btn-light" aria-pressed="false">Light</button>
+  </div>
+  <div class="slider-wrap">
+    <span class="cap">Session</span>
+    <input id="sl-pct" type="range" min="0" max="100" value="42">
+    <span class="live num" id="live-pct">42%</span>
+  </div>
+  <div class="slider-wrap">
+    <span class="cap">Reset in</span>
+    <input id="sl-min" type="range" min="0" max="300" value="134">
+    <span class="live num" id="live-min">2h 14m</span>
+  </div>
+</div>
+
+<div class="doc">
+  <p class="eyebrow">ClaudeBar · Menu bar item</p>
+  <h1>Session 5H + reset countdown — layout options</h1>
+  <p class="lede">
+    Eight candidate layouts for the status item, each shown in a live mini menu bar.
+    Drag the sliders to see threshold colors (amber ≥ 75%, red ≥ 90%) and how each
+    layout breathes as the countdown text changes. Width shown is the live rendered
+    width — menu bar real estate is the main trade-off.
+  </p>
+
+  <div class="grid" id="grid"><div class="card">
+      <div class="card-head">
+        <span class="name">O. Baseline (current)</span>
+        
+      </div>
+      <p class="desc">แบบปัจจุบัน — glyph สองแท่ง + เปอร์เซ็นต์ ไม่มีข้อมูลเวลา reset เลย ใส่ไว้เทียบความกว้าง</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-baseline" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="t num">42%</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-baseline">~63 pt</b></p></div><div class="card reco">
+      <div class="card-head">
+        <span class="name">A. Percent · countdown</span>
+        <span class="tag">แนะนำ</span>
+      </div>
+      <p class="desc">ต่อท้ายด้วย countdown แบบหรี่สี — อ่านครบทั้ง “ใช้ไปเท่าไร” และ “อีกนานแค่ไหนจะ reset” โดยกว้างขึ้นไม่มาก และยังเงียบพอสำหรับ menu bar</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-a" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="t num">42%</span><span class="t dim num">· 2h14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-a">~118 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">B. 5H label + percent · countdown</span>
+        
+      </div>
+      <p class="desc">เหมือน A แต่เติมป้าย “5H” ตัวเล็กไว้หน้า บอกชัดว่าตัวเลขนี้คือ session 5 ชั่วโมง (ไม่ใช่ weekly) — เหมาะถ้าตั้งค่าให้สลับ metric ได้</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-b" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="lbl">5H</span><span class="t num">42%</span><span class="t dim num">· 2h14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-b">~138 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">C. Countdown only</span>
+        
+      </div>
+      <p class="desc">เปอร์เซ็นต์อ่านจาก glyph อย่างเดียว ส่วน text โชว์เวลาที่เหลือ — แคบมาก เหมาะกับคนที่สนใจ “เมื่อไรจะ reset” มากกว่าตัวเลข %</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-c" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="t num">2h14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-c">~77 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">D. Full words</span>
+        
+      </div>
+      <p class="desc">สายตาอ่านง่ายสุด: “42% · resets 2h 14m” คำเต็มแบบใน popover — แลกกับความกว้างที่กินที่สุดในกลุ่ม</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-d" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="t num">42%</span><span class="t dim num">· resets 2h 14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-d">~162 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">E. Two-line stack</span>
+        
+      </div>
+      <p class="desc">ซ้อนสองบรรทัดในความสูง menu bar: บน % ล่าง countdown — แน่นข้อมูลแต่แคบเท่าแบบปัจจุบัน (ต้อง render ทั้งก้อนเป็นรูปเดียว เพราะ NSStatusItem title เป็นบรรทัดเดียว)</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-e" style="--meter: var(--accent);">
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:42%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:25%"></span></span>
+    </span><span class="stack"><span class="s1 num">42%</span><span class="s2 num">2h14m</span></span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-e">~65 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">F. Progress pill</span>
+        
+      </div>
+      <p class="desc">แคปซูลที่พื้นหลังเติมตาม % แล้ววางข้อความ countdown ทับ — ตัวเดียวจบ ไม่ต้องมี glyph แยก ดูโมเดิร์น แต่เสีย weekly hairline ไป</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-f" style="--meter: var(--accent);">
+        <span class="pill">
+          <span class="pfill" style="width:42%"></span>
+          <span class="t num">42%</span><span class="dim num">2h14m</span>
+        </span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-f">~91 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">G. Ring + countdown</span>
+        
+      </div>
+      <p class="desc">วงแหวนแสดง session % (สไตล์ Activity ring) คู่กับเวลาที่เหลือ — กลมกลืนกับไอคอนระบบ macOS แต่วงเล็ก 16pt อ่านค่าละเอียดยาก</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-g" style="--meter: var(--accent);">
+    <svg class="ring" viewBox="0 0 16 16">
+      <circle class="bg" cx="8" cy="8" r="6" fill="none" stroke-width="2.6"></circle>
+      <circle class="fg" cx="8" cy="8" r="6" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="37.69911184307752" stroke-dashoffset="21.865484868984964" transform="rotate(-90 8 8)"></circle>
+    </svg><span class="t num">2h14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-g">~76 pt</b></p></div><div class="card">
+      <div class="card-head">
+        <span class="name">H. Text only</span>
+        
+      </div>
+      <p class="desc">ตัด glyph ทิ้ง เหลือ “5H 42% · 2h14m” ล้วนๆ — เนียนเหมือนนาฬิกาของระบบ แต่เสียสัญญาณสี/แท่งที่มองปราดเดียวรู้</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-h" style="--meter: var(--accent);"><span class="lbl">5H</span><span class="t num">42%</span><span class="t dim num">· 2h14m</span></span>
+          <svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"></circle></svg><svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"></rect><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"></rect><path d="M21 10.5v3" stroke-linecap="round"></path></svg>
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-h">~115 pt</b></p></div></div>
+
+  <footer class="note">
+    <p><b>Implementation notes.</b> Every variant maps onto the existing
+    <code>tray_manager</code> setup: the glyph keeps rendering through
+    <code>renderTrayGlyph</code> (PNG via the method channel) and the text goes in
+    <code>setTitle</code>. The stacked variant (E) needs the whole item rendered as one
+    image instead of icon + title, since <code>NSStatusItem</code> titles are single-line.
+    Countdown granularity of one minute means a 60s re-render timer in
+    <code>TrayController</code>; rounding to 5-minute steps ("2h 15m") would let it
+    re-render lazily with the usual refresh tick.</p>
+  </footer>
+</div>
+
+<script>
+  // ---- variant definitions ----
+  // Each variant supplies render(state) -> innerHTML for its .cb-item.
+  const fmtShort = m => m >= 60 ? `${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}m` : `${m}m`;
+  const fmtLong  = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+
+  const glyph = s => `
+    <span class="glyph">
+      <span class="bar g-top"><span class="fill" style="width:${s.pct}%"></span></span>
+      <span class="bar g-bot"><span class="fill" style="width:${s.weekly}%"></span></span>
+    </span>`;
+
+  const ring = s => {
+    const C = 2 * Math.PI * 6;
+    return `
+    <svg class="ring" viewBox="0 0 16 16">
+      <circle class="bg" cx="8" cy="8" r="6" fill="none" stroke-width="2.6"/>
+      <circle class="fg" cx="8" cy="8" r="6" fill="none" stroke-width="2.6"
+        stroke-linecap="round" stroke-dasharray="${C}"
+        stroke-dashoffset="${C * (1 - s.pct/100)}"
+        transform="rotate(-90 8 8)"/>
+    </svg>`;
+  };
+
+  const variants = [
+    {
+      id: 'baseline', name: 'O. Baseline (current)', tag: null,
+      desc: 'แบบปัจจุบัน — glyph สองแท่ง + เปอร์เซ็นต์ ไม่มีข้อมูลเวลา reset เลย ใส่ไว้เทียบความกว้าง',
+      render: s => `${glyph(s)}<span class="t num">${s.pct}%</span>`
+    },
+    {
+      id: 'a', name: 'A. Percent · countdown', tag: 'แนะนำ',
+      desc: 'ต่อท้ายด้วย countdown แบบหรี่สี — อ่านครบทั้ง “ใช้ไปเท่าไร” และ “อีกนานแค่ไหนจะ reset” โดยกว้างขึ้นไม่มาก และยังเงียบพอสำหรับ menu bar',
+      render: s => `${glyph(s)}<span class="t num">${s.pct}%</span><span class="t dim num">· ${fmtShort(s.min)}</span>`
+    },
+    {
+      id: 'b', name: 'B. 5H label + percent · countdown',
+      desc: 'เหมือน A แต่เติมป้าย “5H” ตัวเล็กไว้หน้า บอกชัดว่าตัวเลขนี้คือ session 5 ชั่วโมง (ไม่ใช่ weekly) — เหมาะถ้าตั้งค่าให้สลับ metric ได้',
+      render: s => `${glyph(s)}<span class="lbl">5H</span><span class="t num">${s.pct}%</span><span class="t dim num">· ${fmtShort(s.min)}</span>`
+    },
+    {
+      id: 'c', name: 'C. Countdown only',
+      desc: 'เปอร์เซ็นต์อ่านจาก glyph อย่างเดียว ส่วน text โชว์เวลาที่เหลือ — แคบมาก เหมาะกับคนที่สนใจ “เมื่อไรจะ reset” มากกว่าตัวเลข %',
+      render: s => `${glyph(s)}<span class="t num">${fmtShort(s.min)}</span>`
+    },
+    {
+      id: 'd', name: 'D. Full words',
+      desc: 'สายตาอ่านง่ายสุด: “42% · resets 2h 14m” คำเต็มแบบใน popover — แลกกับความกว้างที่กินที่สุดในกลุ่ม',
+      render: s => `${glyph(s)}<span class="t num">${s.pct}%</span><span class="t dim num">· resets ${fmtLong(s.min)}</span>`
+    },
+    {
+      id: 'e', name: 'E. Two-line stack',
+      desc: 'ซ้อนสองบรรทัดในความสูง menu bar: บน % ล่าง countdown — แน่นข้อมูลแต่แคบเท่าแบบปัจจุบัน (ต้อง render ทั้งก้อนเป็นรูปเดียว เพราะ NSStatusItem title เป็นบรรทัดเดียว)',
+      render: s => `${glyph(s)}<span class="stack"><span class="s1 num">${s.pct}%</span><span class="s2 num">${fmtShort(s.min)}</span></span>`
+    },
+    {
+      id: 'f', name: 'F. Progress pill',
+      desc: 'แคปซูลที่พื้นหลังเติมตาม % แล้ววางข้อความ countdown ทับ — ตัวเดียวจบ ไม่ต้องมี glyph แยก ดูโมเดิร์น แต่เสีย weekly hairline ไป',
+      render: s => `
+        <span class="pill">
+          <span class="pfill" style="width:${s.pct}%"></span>
+          <span class="t num">${s.pct}%</span><span class="dim num">${fmtShort(s.min)}</span>
+        </span>`
+    },
+    {
+      id: 'g', name: 'G. Ring + countdown',
+      desc: 'วงแหวนแสดง session % (สไตล์ Activity ring) คู่กับเวลาที่เหลือ — กลมกลืนกับไอคอนระบบ macOS แต่วงเล็ก 16pt อ่านค่าละเอียดยาก',
+      render: s => `${ring(s)}<span class="t num">${fmtShort(s.min)}</span>`
+    },
+    {
+      id: 'h', name: 'H. Text only',
+      desc: 'ตัด glyph ทิ้ง เหลือ “5H 42% · 2h14m” ล้วนๆ — เนียนเหมือนนาฬิกาของระบบ แต่เสียสัญญาณสี/แท่งที่มองปราดเดียวรู้',
+      render: s => `<span class="lbl">5H</span><span class="t num">${s.pct}%</span><span class="t dim num">· ${fmtShort(s.min)}</span>`
+    },
+  ];
+
+  // ---- build cards ----
+  const wifi = `<svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg>`;
+  const batt = `<svg class="sysicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="8" width="17" height="8" rx="2.5"/><rect x="4" y="10" width="10" height="4" rx="1" fill="currentColor" stroke="none"/><path d="M21 10.5v3" stroke-linecap="round"/></svg>`;
+
+  // Cards are baked into the HTML as static markup (so the page reads fine in
+  // viewers that block scripts); rebuild from scratch when JS does run so the
+  // sliders stay live.
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (const v of variants) {
+    const card = document.createElement('div');
+    card.className = 'card' + (v.tag ? ' reco' : '');
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="name">${v.name}</span>
+        ${v.tag ? `<span class="tag">${v.tag}</span>` : ''}
+      </div>
+      <p class="desc">${v.desc}</p>
+      <div class="stagebar">
+        <div class="menubar">
+          <span class="cb-item" id="item-${v.id}"></span>
+          ${wifi}${batt}
+          <span class="clock num">Wed Jun 10  21:41</span>
+        </div>
+      </div>
+      <p class="meta">Item width: <b class="num" id="w-${v.id}">—</b></p>`;
+    grid.appendChild(card);
+  }
+
+  // ---- state + render loop ----
+  const slPct = document.getElementById('sl-pct');
+  const slMin = document.getElementById('sl-min');
+
+  function update() {
+    const pct = +slPct.value;
+    const min = +slMin.value;
+    const state = { pct, min, weekly: Math.max(8, Math.round(pct * 0.6)) };
+
+    document.getElementById('live-pct').textContent = pct + '%';
+    document.getElementById('live-min').textContent = fmtLong(min);
+
+    const meter = pct >= 90 ? 'var(--red)' : pct >= 75 ? 'var(--amber)' : 'var(--accent)';
+    for (const v of variants) {
+      const el = document.getElementById('item-' + v.id);
+      el.style.setProperty('--meter', meter);
+      el.innerHTML = v.render(state);
+    }
+    // measure after layout
+    requestAnimationFrame(() => {
+      for (const v of variants) {
+        const w = document.getElementById('item-' + v.id).offsetWidth;
+        document.getElementById('w-' + v.id).textContent = '~' + Math.round(w) + ' pt';
+      }
+    });
+  }
+
+  slPct.addEventListener('input', update);
+  slMin.addEventListener('input', update);
+
+  // theme toggle
+  const bd = document.getElementById('btn-dark'), bl = document.getElementById('btn-light');
+  function setTheme(t) {
+    document.documentElement.dataset.theme = t;
+    bd.setAttribute('aria-pressed', String(t === 'dark'));
+    bl.setAttribute('aria-pressed', String(t === 'light'));
+  }
+  bd.addEventListener('click', () => setTheme('dark'));
+  bl.addEventListener('click', () => setTheme('light'));
+
+  update();
+</script>
+
+
+</body></html>
