@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -28,6 +29,8 @@ class TrayController with TrayListener {
   /// runtime-rendered glyph (base64) instead of a bundled asset.
   static const MethodChannel _trayChannel = MethodChannel('tray_manager');
 
+  Timer? _countdownTimer;
+
   Future<void> init() async {
     trayManager.addListener(this);
     await _rebuild();
@@ -35,6 +38,10 @@ class TrayController with TrayListener {
     // Re-render whenever usage or the chosen metric changes.
     container.listen(usageControllerProvider, (_, __) => _rebuild(), fireImmediately: false);
     container.listen(settingsProvider, (_, __) => _rebuild(), fireImmediately: false);
+
+    // The title carries a minute-granular reset countdown, so tick it along
+    // between refreshes (design mockup variant A: "42% · 2h14m").
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _rebuild());
   }
 
   Future<void> _rebuild() async {
@@ -80,7 +87,9 @@ class TrayController with TrayListener {
     final snapshot = state.snapshot;
     if (snapshot != null) {
       final window = metric == MenuBarMetric.weekly ? snapshot.weekly : snapshot.session;
-      return Fmt.pct(window.percent);
+      final countdown = Fmt.countdownShort(window.resetsAt);
+      final pct = Fmt.pct(window.percent);
+      return countdown == null ? pct : '$pct · $countdown';
     }
     if (state.error != null) return state.error!.menuBarLabel;
     return '--%';
@@ -145,6 +154,7 @@ class TrayController with TrayListener {
   }
 
   Future<void> _quit() async {
+    _countdownTimer?.cancel();
     await trayManager.destroy();
     exit(0);
   }
