@@ -258,6 +258,9 @@ doc/api/
 # Design mockups (local HTML prototypes — not part of the app)
 mockups/
 
+# Local release scripts (kept on this machine only)
+scripts/
+
 # Cursor IDE
 .cursor/
 !.cursor/rules/
