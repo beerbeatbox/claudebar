@@ -124,12 +124,17 @@ class _UsageView extends StatelessWidget {
           _StatusBody(error: error, t: t)
         else if (snapshot != null) ...[
           if (snapshot.stale) _OfflineRow(t: t),
-          MeterRow(window: snapshot.session, stale: snapshot.stale),
+          MeterRow(
+            window: snapshot.session,
+            stale: snapshot.stale,
+            fetchedAt: snapshot.fetchedAt,
+          ),
           const SizedBox(height: 16),
           MeterRow(
             window: snapshot.weekly,
             colorize: false,
             stale: snapshot.stale,
+            fetchedAt: snapshot.fetchedAt,
           ),
           if (snapshot.opus != null || snapshot.sonnet != null) ...[
             Divider(color: t.hairline, height: 28, thickness: 0.5),

@@ -16,11 +16,15 @@ class MeterRow extends StatelessWidget {
   /// Forces the neutral/stale tertiary color for offline display.
   final bool stale;
 
+  /// When the stale snapshot was fetched — shown as "As of HH:mm".
+  final DateTime? fetchedAt;
+
   const MeterRow({
     super.key,
     required this.window,
     this.colorize = true,
     this.stale = false,
+    this.fetchedAt,
   });
 
   @override
@@ -29,7 +33,7 @@ class MeterRow extends StatelessWidget {
     final Color meter =
         stale ? t.text3 : (colorize ? levelColor(window.percent, t) : t.accent);
     final reset = stale
-        ? (window.resetsAt != null ? Fmt.asOf(DateTime.now()) : null)
+        ? (fetchedAt != null ? Fmt.asOf(fetchedAt!) : null)
         : Fmt.resets(window.resetsAt);
 
     return Column(
