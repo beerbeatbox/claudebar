@@ -41,7 +41,10 @@ class UsageError {
       case UsageErrorKind.keychainDenied:
         return 'Locked';
       case UsageErrorKind.rateLimited:
-        return 'Limited';
+      // A 429 on the usage endpoint isn't a quota limit — showing 'Limited'
+      // here reads as "you're out of usage", which it isn't. Fall through to
+      // the neutral '--%'; the popover's "Rate limited" copy carries the
+      // real explanation with context.
       case UsageErrorKind.network:
       case UsageErrorKind.unknown:
         return '--%';
