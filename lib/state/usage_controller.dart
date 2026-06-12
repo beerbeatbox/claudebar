@@ -122,7 +122,8 @@ class UsageController extends Notifier<UsageState> {
       return;
     }
 
-    final credResult = await ref.read(credentialsReaderProvider).read();
+    final reader = ref.read(credentialsReaderProvider);
+    var credResult = await reader.read();
     if (!credResult.isOk) {
       state = UsageState(
         snapshot: _stale(),
@@ -132,9 +133,22 @@ class UsageController extends Notifier<UsageState> {
       return;
     }
 
-    final usageResult = await ref
+    var usageResult = await ref
         .read(usageApiProvider)
         .fetch(credResult.credentials!);
+
+    // A 401 usually means the cached token was rotated by Claude Code while
+    // we held it — drop the cache, re-read the file/Keychain, and retry once.
+    // If the store still has the same dead token, the second 401 surfaces as
+    // the normal expired-token state.
+    if (usageResult.error?.kind == UsageErrorKind.expiredToken) {
+      reader.invalidate();
+      credResult = await reader.read();
+      if (credResult.isOk) {
+        usageResult =
+            await ref.read(usageApiProvider).fetch(credResult.credentials!);
+      }
+    }
     if (usageResult.isOk) {
       _backoff = Duration.zero;
       state = UsageState(snapshot: usageResult.snapshot, loading: false);
