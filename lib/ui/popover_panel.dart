@@ -419,6 +419,17 @@ class _BubblePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final path = _bubblePath(size);
 
+    // The card fill is translucent (native blur shows through it), so the
+    // shadows must be clipped to OUTSIDE the bubble — drawn underneath they
+    // would darken the glass instead of the desktop around it.
+    canvas.save();
+    canvas.clipPath(
+      Path.combine(
+        PathOperation.difference,
+        Path()..addRect(Rect.fromLTRB(-60, -60, size.width + 60, size.height + 80)),
+        path,
+      ),
+    );
     canvas.drawPath(
       path.shift(const Offset(0, 18)),
       Paint()
@@ -431,6 +442,7 @@ class _BubblePainter extends CustomPainter {
         ..color = const Color(0x40000000)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, _sigma(8)),
     );
+    canvas.restore();
 
     canvas.drawPath(path, Paint()..color = color);
     canvas.drawPath(

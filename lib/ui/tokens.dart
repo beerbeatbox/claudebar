@@ -39,8 +39,10 @@ class ClaudeTokens {
     required this.red,
   });
 
+  // cardBg is deliberately translucent: on macOS a native NSVisualEffectView
+  // (frosted glass, like real menus) sits behind the card and shows through.
   static const ClaudeTokens dark = ClaudeTokens(
-    cardBg: Color(0xF21E1E23),
+    cardBg: Color(0x4D1E1E23),
     cardBorder: Color(0x1FFFFFFF),
     text1: Color(0xF2FFFFFF),
     text2: Color(0x8FFFFFFF),
@@ -53,7 +55,7 @@ class ClaudeTokens {
   );
 
   static const ClaudeTokens light = ClaudeTokens(
-    cardBg: Color(0xF7F7F7F9),
+    cardBg: Color(0x73F7F7F9),
     cardBorder: Color(0x14000000),
     text1: Color(0xE0000000),
     text2: Color(0x80000000),

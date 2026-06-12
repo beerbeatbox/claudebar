@@ -2,6 +2,98 @@ import Cocoa
 import FlutterMacOS
 import Security
 
+/// Native frosted-glass backdrop for the popover card, like a real macOS menu.
+///
+/// Flutter's BackdropFilter can only blur Flutter's own pixels; blurring the
+/// desktop behind the window requires an AppKit NSVisualEffectView sitting
+/// below the (transparent) FlutterView. It is masked to the same
+/// bubble-with-arrow shape the Dart side paints, so the blur never leaks into
+/// the transparent shadow gutter around the card.
+final class PopoverBlurView: NSVisualEffectView {
+  // Card geometry mirrored from popover_panel.dart / popover_window.dart:
+  // 40 pt side gutter, 64 pt bottom gutter, 8 pt arrow, 9 pt arrow half-width,
+  // 14 pt corner radius. Keep the two in sync.
+  static let gutterSide: CGFloat = 40
+  static let gutterBottom: CGFloat = 64
+  static let arrowHeight: CGFloat = 8
+  static let arrowHalfWidth: CGFloat = 9
+  static let cornerRadius: CGFloat = 14
+
+  /// Arrow-centre distance from the window's right edge; pushed from Dart by
+  /// the window positioner so the mask tracks the status item.
+  var arrowFromRight: CGFloat = 70 {
+    didSet { rebuildMask() }
+  }
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    material = .menu
+    blendingMode = .behindWindow
+    // The popover is a non-activating panel, so it never counts as the active
+    // window; without forcing .active the material renders flat and opaque.
+    state = .active
+    autoresizingMask = [.width, .height]
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+  /// Inserts the blur below the window's content view. Called on every show
+  /// rather than once at startup: window_manager's `setAsFrameless()` swaps
+  /// the style mask, which makes AppKit rebuild the window's frame view and
+  /// silently drop any subview installed there earlier.
+  func attach(to window: NSWindow) {
+    guard let contentView = window.contentView,
+          let themeFrame = contentView.superview,
+          superview !== themeFrame
+    else { return }
+    frame = contentView.frame
+    themeFrame.addSubview(self, positioned: .below, relativeTo: contentView)
+  }
+
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize)
+    rebuildMask()
+  }
+
+  private func rebuildMask() {
+    guard bounds.width > 0, bounds.height > 0 else { return }
+    let size = bounds.size
+    let arrowFromRight = self.arrowFromRight
+    let image = NSImage(size: size, flipped: false) { _ in
+      NSColor.black.setFill()
+      Self.bubblePath(in: size, arrowFromRight: arrowFromRight).fill()
+      return true
+    }
+    maskImage = image
+  }
+
+  /// The card-plus-arrow outline in AppKit (bottom-left origin) coordinates;
+  /// must trace the same shape as _BubblePainter._bubblePath in Dart.
+  static func bubblePath(in size: NSSize, arrowFromRight: CGFloat) -> NSBezierPath {
+    let card = NSRect(
+      x: gutterSide,
+      y: gutterBottom,
+      width: size.width - 2 * gutterSide,
+      height: size.height - gutterBottom - arrowHeight)
+    let path = NSBezierPath(roundedRect: card, xRadius: cornerRadius, yRadius: cornerRadius)
+
+    let cx = size.width - arrowFromRight
+    let top = size.height
+    let base = card.maxY
+    let arrow = NSBezierPath()
+    arrow.move(to: NSPoint(x: cx - arrowHalfWidth, y: base))
+    // Slightly rounded tip, matching the Dart painter.
+    arrow.line(to: NSPoint(x: cx - 1.5, y: top - 1.33))
+    arrow.curve(to: NSPoint(x: cx + 1.5, y: top - 1.33),
+                controlPoint1: NSPoint(x: cx, y: top),
+                controlPoint2: NSPoint(x: cx, y: top))
+    arrow.line(to: NSPoint(x: cx + arrowHalfWidth, y: base))
+    arrow.close()
+    path.append(arrow)
+    return path
+  }
+}
+
 class MainFlutterWindow: NSPanel {
   // Menu-bar popover: keep the window non-opaque so only the rounded card drawn
   // by Flutter shows. window_manager's `setAsFrameless()` hard-sets
@@ -47,6 +139,11 @@ class MainFlutterWindow: NSPanel {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    // Frosted backdrop behind the (transparent) FlutterView; attached lazily
+    // on each show because style-mask changes rebuild the frame view it
+    // lives in (see PopoverBlurView.attach).
+    let blurView = PopoverBlurView(frame: self.frame)
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     // Read-only Keychain bridge for the Claude Code credentials (spec §7).
@@ -55,7 +152,8 @@ class MainFlutterWindow: NSPanel {
     // Activation-free show/hide for the popover (see PopoverChannel).
     PopoverChannel.register(
       with: flutterViewController.registrar(forPlugin: "PopoverChannel"),
-      window: self
+      window: self,
+      blur: blurView
     )
 
     super.awakeFromNib()
@@ -73,18 +171,32 @@ class MainFlutterWindow: NSPanel {
 enum PopoverChannel {
   static let channelName = "claudebar/popover"
 
-  static func register(with registrar: FlutterPluginRegistrar, window: NSWindow) {
+  static func register(
+    with registrar: FlutterPluginRegistrar,
+    window: NSWindow,
+    blur: PopoverBlurView?
+  ) {
     let channel = FlutterMethodChannel(
       name: channelName,
       binaryMessenger: registrar.messenger
     )
+    // `blur` is captured strongly on purpose: until the first show it has no
+    // superview, so a weak reference would let it deallocate immediately.
     channel.setMethodCallHandler { [weak window] call, result in
       switch call.method {
       case "show":
+        if let window { blur?.attach(to: window) }
         window?.makeKeyAndOrderFront(nil)
         result(true)
       case "hide":
         window?.orderOut(nil)
+        result(true)
+      // Keeps the blur mask's arrow under the status item; the Dart
+      // positioner sends the same arrowFromRight it hands to the painter.
+      case "setArrow":
+        if let fromRight = call.arguments as? Double {
+          blur?.arrowFromRight = CGFloat(fromRight)
+        }
         result(true)
       default:
         result(FlutterMethodNotImplemented)

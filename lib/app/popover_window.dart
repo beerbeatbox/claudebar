@@ -136,6 +136,9 @@ class PopoverWindow with WindowListener {
       _minArrowFromRight,
       width - _minArrowFromRight,
     );
+    // The native blur backdrop masks itself to the same bubble shape and
+    // needs the arrow offset too (see PopoverBlurView).
+    await _panelChannel.invokeMethod('setArrow', arrowFromRight.value);
 
     final top = visPos.dy; // just below the menu bar
     await windowManager.setPosition(Offset(left, top));
