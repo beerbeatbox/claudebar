@@ -41,6 +41,13 @@ scripts:
     get: fvm flutter pub get
     upgrade: fvm flutter pub upgrade
   run: fvm flutter run -d macos
+  test:
+    $script: fvm flutter test
+    # XCTest regression tests (popover click routing) — needs the ephemeral
+    # Xcode config from a debug build first.
+    native:
+      $before: fvm flutter build macos --debug
+      $script: xcodebuild test -workspace macos/Runner.xcworkspace -scheme Runner -configuration Debug
   clean: fvm flutter clean && fvm flutter pub get
   gen:
     code: fvm dart run build_runner watch
