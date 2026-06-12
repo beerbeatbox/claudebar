@@ -7,7 +7,8 @@ enum MenuBarMetric { session, weekly }
 
 /// Persisted user settings (spec §10, Phase 2).
 class Settings {
-  /// Auto-refresh interval in minutes (presets: 1 / 2 / 5 / 15; default 5).
+  /// Auto-refresh interval in minutes (presets: 2 / 5 / 15; default 5). 1m was
+  /// dropped — the usage endpoint rate-limits too hard to poll that often.
   final int refreshMinutes;
   final MenuBarMetric metric;
   final bool launchAtLogin;
@@ -41,8 +42,10 @@ class SettingsController extends Notifier<Settings> {
   @override
   Settings build() {
     final prefs = ref.watch(sharedPreferencesProvider);
+    // Migrate anyone who had the now-removed 1m preset up to the 2m floor.
+    final storedInterval = prefs.getInt(_kInterval) ?? 5;
     return Settings(
-      refreshMinutes: prefs.getInt(_kInterval) ?? 5,
+      refreshMinutes: storedInterval < 2 ? 2 : storedInterval,
       metric: MenuBarMetric.values[
           (prefs.getInt(_kMetric) ?? 0).clamp(0, MenuBarMetric.values.length - 1)],
       launchAtLogin: prefs.getBool(_kLaunch) ?? false,

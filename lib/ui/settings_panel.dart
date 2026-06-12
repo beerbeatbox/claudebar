@@ -50,7 +50,7 @@ class SettingsPanel extends ConsumerWidget {
         const SizedBox(height: 8),
         _Segmented<int>(
           value: settings.refreshMinutes,
-          options: const {1: '1m', 2: '2m', 5: '5m', 15: '15m'},
+          options: const {2: '2m', 5: '5m', 15: '15m'},
           onChanged: controller.setRefreshMinutes,
         ),
         const SizedBox(height: 18),
