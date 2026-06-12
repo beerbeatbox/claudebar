@@ -95,6 +95,13 @@ class UsageController extends Notifier<UsageState> {
     _timer?.cancel();
     _timer = Timer.periodic(Duration(minutes: minutes), (_) => refresh());
 
+    // Changing the interval re-runs build (it watches refreshMinutes). Keep
+    // the current snapshot and cooldown lock — resetting to loading() blanked
+    // the menu-bar title to "–" and re-fetched outside the cooldown on every
+    // settings tweak. The new timer cadence takes over from here.
+    final previous = stateOrNull;
+    if (previous != null) return previous;
+
     // Kick off the first load after the notifier is constructed.
     Future.microtask(refresh);
 
