@@ -22,37 +22,71 @@ class UsageState {
   final UsageError? error;
   final bool loading;
 
-  const UsageState({this.snapshot, this.error, this.loading = false});
+  /// Until this instant, refresh requests are ignored and the Refresh button
+  /// is disabled — either the post-refresh cooldown or a 429 backoff window.
+  final DateTime? lockedUntil;
 
-  const UsageState.loading() : snapshot = null, error = null, loading = true;
+  const UsageState({
+    this.snapshot,
+    this.error,
+    this.loading = false,
+    this.lockedUntil,
+  });
+
+  const UsageState.loading()
+    : snapshot = null,
+      error = null,
+      loading = true,
+      lockedUntil = null;
+
+  bool get locked =>
+      lockedUntil != null && DateTime.now().isBefore(lockedUntil!);
 
   UsageState copyWith({
     UsageSnapshot? snapshot,
     UsageError? error,
     bool? loading,
+    DateTime? lockedUntil,
     bool clearError = false,
+    bool clearLock = false,
   }) {
     return UsageState(
       snapshot: snapshot ?? this.snapshot,
       error: clearError ? null : (error ?? this.error),
       loading: loading ?? this.loading,
+      lockedUntil: clearLock ? null : (lockedUntil ?? this.lockedUntil),
     );
   }
 }
 
-final credentialsReaderProvider =
-    Provider<CredentialsReader>((ref) => CredentialsReader());
+final credentialsReaderProvider = Provider<CredentialsReader>(
+  (ref) => CredentialsReader(),
+);
 
 final usageApiProvider = Provider<UsageApi>((ref) => UsageApi());
 
 class UsageController extends Notifier<UsageState> {
+  /// Minimum gap between refreshes once one succeeds — usage data doesn't
+  /// move faster than this, and the endpoint's quota has proven tight enough
+  /// that even a single extra request minutes after the last one can 429.
+  static const _cooldown = Duration(seconds: 60);
+
+  /// 429 backoff ladder: 1 → 2 → 4 → 8 minutes, capped.
+  static const _maxBackoff = Duration(minutes: 8);
+
   Timer? _timer;
+  Timer? _unlockTimer;
+  bool _refreshing = false;
+  Duration _backoff = Duration.zero;
 
   @override
   UsageState build() {
     final minutes = ref.watch(settingsProvider.select((s) => s.refreshMinutes));
 
-    ref.onDispose(() => _timer?.cancel());
+    ref.onDispose(() {
+      _timer?.cancel();
+      _unlockTimer?.cancel();
+    });
     _timer?.cancel();
     _timer = Timer.periodic(Duration(minutes: minutes), (_) => refresh());
 
@@ -64,11 +98,27 @@ class UsageController extends Notifier<UsageState> {
 
   /// Reads credentials, fetches usage, and updates state. On network failure
   /// the last snapshot is kept and marked stale (spec §11).
+  ///
+  /// The app, not the caller, owns the request rate: calls are dropped while
+  /// a fetch is in flight, during the post-success cooldown, and during a 429
+  /// backoff window — so neither button-mashing nor the periodic timer can
+  /// hammer the endpoint.
   Future<void> refresh() async {
+    if (_refreshing || state.locked) return;
+    _refreshing = true;
+    try {
+      await _refresh();
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _refresh() async {
     state = state.copyWith(loading: true);
 
     if (kFakeUsage) {
       state = UsageState(snapshot: _fakeSnapshot(), loading: false);
+      _lock(_cooldown);
       return;
     }
 
@@ -82,9 +132,24 @@ class UsageController extends Notifier<UsageState> {
       return;
     }
 
-    final usageResult = await ref.read(usageApiProvider).fetch(credResult.credentials!);
+    final usageResult = await ref
+        .read(usageApiProvider)
+        .fetch(credResult.credentials!);
     if (usageResult.isOk) {
+      _backoff = Duration.zero;
       state = UsageState(snapshot: usageResult.snapshot, loading: false);
+      _lock(_cooldown);
+    } else if (usageResult.error?.kind == UsageErrorKind.rateLimited) {
+      _backoff =
+          _backoff == Duration.zero
+              ? const Duration(minutes: 1)
+              : (_backoff * 2 > _maxBackoff ? _maxBackoff : _backoff * 2);
+      state = UsageState(
+        snapshot: _stale(),
+        error: usageResult.error,
+        loading: false,
+      );
+      _lock(_backoff, retryAfter: true);
     } else {
       state = UsageState(
         snapshot: _stale(),
@@ -92,6 +157,17 @@ class UsageController extends Notifier<UsageState> {
         loading: false,
       );
     }
+  }
+
+  /// Blocks refreshes for [duration] and schedules the unlock, optionally
+  /// retrying automatically once the window passes (the 429 path).
+  void _lock(Duration duration, {bool retryAfter = false}) {
+    _unlockTimer?.cancel();
+    state = state.copyWith(lockedUntil: DateTime.now().add(duration));
+    _unlockTimer = Timer(duration, () {
+      state = state.copyWith(clearLock: true);
+      if (retryAfter) refresh();
+    });
   }
 
   /// The current snapshot marked stale, for keep-last-known display.
@@ -119,5 +195,6 @@ class UsageController extends Notifier<UsageState> {
   }
 }
 
-final usageControllerProvider =
-    NotifierProvider<UsageController, UsageState>(UsageController.new);
+final usageControllerProvider = NotifierProvider<UsageController, UsageState>(
+  UsageController.new,
+);

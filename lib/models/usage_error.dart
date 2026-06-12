@@ -10,6 +10,9 @@ enum UsageErrorKind {
   /// Endpoint returned 401 — token expired.
   expiredToken,
 
+  /// Endpoint returned 429 — too many requests, back off before retrying.
+  rateLimited,
+
   /// Network failure / non-401 HTTP error.
   network,
 
@@ -37,6 +40,8 @@ class UsageError {
         return 'Expired';
       case UsageErrorKind.keychainDenied:
         return 'Locked';
+      case UsageErrorKind.rateLimited:
+        return 'Limited';
       case UsageErrorKind.network:
       case UsageErrorKind.unknown:
         return '--%';
@@ -54,6 +59,8 @@ class UsageError {
         return 'Re-authenticate';
       case UsageErrorKind.keychainDenied:
         return 'Keychain access needed';
+      case UsageErrorKind.rateLimited:
+        return 'Rate limited';
       case UsageErrorKind.network:
         return 'Can’t reach Anthropic';
       case UsageErrorKind.unknown:
@@ -63,7 +70,7 @@ class UsageError {
 
   static const noCredentials = UsageError(
     UsageErrorKind.noCredentials,
-    'Sign in to Claude Code first, then hit Refresh.',
+    'Sign in to Claude Code — ClaudeBar will pick it up shortly, or right-click the menu-bar icon → Refresh.',
   );
 
   static const missingScope = UsageError(
@@ -73,12 +80,17 @@ class UsageError {
 
   static const expiredToken = UsageError(
     UsageErrorKind.expiredToken,
-    'Your session token expired. Open Claude Code to refresh it, then hit Refresh.',
+    'Your session token expired. Open Claude Code to refresh it — ClaudeBar will pick it up shortly, or right-click the menu-bar icon → Refresh.',
   );
 
   static const keychainDenied = UsageError(
     UsageErrorKind.keychainDenied,
     'Allow ClaudeBar to read “Claude Code-credentials” in Keychain Access → login → Access Control.',
+  );
+
+  static const rateLimited = UsageError(
+    UsageErrorKind.rateLimited,
+    'Anthropic asked us to slow down. ClaudeBar will retry by itself — no need to press Refresh.',
   );
 
   static const network = UsageError(

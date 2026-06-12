@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +22,11 @@ class Popover extends ConsumerStatefulWidget {
   /// positioner so the arrow tracks the status item.
   final ValueListenable<double> arrowFromRight;
 
-  const Popover({super.key, required this.onQuit, required this.arrowFromRight});
+  const Popover({
+    super.key,
+    required this.onQuit,
+    required this.arrowFromRight,
+  });
 
   @override
   ConsumerState<Popover> createState() => _PopoverState();
@@ -65,11 +71,6 @@ class _PopoverState extends ConsumerState<Popover> {
                   )
                   : _UsageView(
                     state: state,
-                    onRefresh:
-                        () =>
-                            ref
-                                .read(usageControllerProvider.notifier)
-                                .refresh(),
                     onSettings: () => setState(() => _showSettings = true),
                   ),
         ),
@@ -80,14 +81,9 @@ class _PopoverState extends ConsumerState<Popover> {
 
 class _UsageView extends StatelessWidget {
   final UsageState state;
-  final VoidCallback onRefresh;
   final VoidCallback onSettings;
 
-  const _UsageView({
-    required this.state,
-    required this.onRefresh,
-    required this.onSettings,
-  });
+  const _UsageView({required this.state, required this.onSettings});
 
   @override
   Widget build(BuildContext context) {
@@ -121,9 +117,20 @@ class _UsageView extends StatelessWidget {
         if (snapshot == null && state.loading)
           _LoadingBody(t: t)
         else if (snapshot == null && error != null)
-          _StatusBody(error: error, t: t)
+          _StatusBody(error: error, t: t, retryAt: state.lockedUntil)
         else if (snapshot != null) ...[
-          if (snapshot.stale) _OfflineRow(t: t),
+          if (snapshot.stale)
+            _OfflineRow(
+              t: t,
+              message:
+                  error?.kind == UsageErrorKind.rateLimited
+                      ? 'Rate limited — showing last sync'
+                      : 'Offline — showing last sync',
+              retryAt:
+                  error?.kind == UsageErrorKind.rateLimited
+                      ? state.lockedUntil
+                      : null,
+            ),
           MeterRow(
             window: snapshot.session,
             stale: snapshot.stale,
@@ -156,23 +163,7 @@ class _UsageView extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            Row(
-              children: [
-                _FootBtn(
-                  icon: Icons.refresh,
-                  label: 'Refresh',
-                  onTap: onRefresh,
-                  t: t,
-                  busy: state.loading,
-                ),
-                const SizedBox(width: 4),
-                _FootBtn(
-                  icon: Icons.settings_outlined,
-                  onTap: onSettings,
-                  t: t,
-                ),
-              ],
-            ),
+            _FootBtn(icon: Icons.settings_outlined, onTap: onSettings, t: t),
           ],
         ),
       ],
@@ -188,7 +179,12 @@ class _UsageView extends StatelessWidget {
 
 class _OfflineRow extends StatelessWidget {
   final ClaudeTokens t;
-  const _OfflineRow({required this.t});
+  final String message;
+
+  /// When set, an auto-retry countdown ticks alongside the message (429).
+  final DateTime? retryAt;
+
+  const _OfflineRow({required this.t, required this.message, this.retryAt});
 
   @override
   Widget build(BuildContext context) {
@@ -199,13 +195,17 @@ class _OfflineRow extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(color: t.text3, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: retryAt != null ? t.amber : t.text3,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 9),
-          Text(
-            'Offline — showing last sync',
-            style: TextStyle(fontSize: 12, color: t.text2),
-          ),
+          Text(message, style: TextStyle(fontSize: 12, color: t.text2)),
+          if (retryAt != null) ...[
+            const SizedBox(width: 6),
+            _RetryCountdown(until: retryAt!, t: t),
+          ],
         ],
       ),
     );
@@ -215,10 +215,17 @@ class _OfflineRow extends StatelessWidget {
 class _StatusBody extends StatelessWidget {
   final UsageError error;
   final ClaudeTokens t;
-  const _StatusBody({required this.error, required this.t});
+
+  /// When the controller will retry by itself (the 429 backoff window) —
+  /// shown as a live countdown so nobody feels the need to mash Refresh.
+  final DateTime? retryAt;
+
+  const _StatusBody({required this.error, required this.t, this.retryAt});
 
   @override
   Widget build(BuildContext context) {
+    final showRetry =
+        error.kind == UsageErrorKind.rateLimited && retryAt != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6, top: 2),
       child: Column(
@@ -250,7 +257,55 @@ class _StatusBody extends StatelessWidget {
             error.message,
             style: TextStyle(fontSize: 12, height: 1.45, color: t.text2),
           ),
+          if (showRetry) ...[
+            const SizedBox(height: 6),
+            _RetryCountdown(until: retryAt!, t: t),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// Ticking "Retrying in m:ss" line for the rate-limited state.
+class _RetryCountdown extends StatefulWidget {
+  final DateTime until;
+  final ClaudeTokens t;
+  const _RetryCountdown({required this.until, required this.t});
+
+  @override
+  State<_RetryCountdown> createState() => _RetryCountdownState();
+}
+
+class _RetryCountdownState extends State<_RetryCountdown> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final left = widget.until.difference(DateTime.now());
+    if (left.isNegative) return const SizedBox.shrink();
+    final m = left.inMinutes;
+    final s = left.inSeconds % 60;
+    return Text(
+      'Retrying in $m:${s.toString().padLeft(2, '0')}',
+      style: TextStyle(
+        fontSize: 12,
+        color: widget.t.text3,
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }
@@ -282,36 +337,57 @@ class _LoadingBody extends StatelessWidget {
   }
 }
 
-class _FootBtn extends StatelessWidget {
+class _FootBtn extends StatefulWidget {
   final IconData icon;
-  final String? label;
   final VoidCallback onTap;
   final ClaudeTokens t;
-  final bool busy;
 
-  const _FootBtn({
-    required this.icon,
-    this.label,
-    required this.onTap,
-    required this.t,
-    this.busy = false,
-  });
+  const _FootBtn({required this.icon, required this.onTap, required this.t});
+
+  @override
+  State<_FootBtn> createState() => _FootBtnState();
+}
+
+class _FootBtnState extends State<_FootBtn> {
+  bool _pressed = false;
+  bool _hover = false;
+
+  /// Quick clicks fire tap-down and tap-up within a few ms — too fast for the
+  /// pressed visual to register. Hold it on screen briefly before releasing.
+  void _release() {
+    Future.delayed(const Duration(milliseconds: 130), () {
+      if (mounted) setState(() => _pressed = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: t.text2),
-            if (label != null) ...[
-              const SizedBox(width: 5),
-              Text(label!, style: TextStyle(fontSize: 12, color: t.text2)),
-            ],
-          ],
+    final t = widget.t;
+    final color = _hover ? t.text1 : t.text2;
+    final bg =
+        _pressed ? t.track : (_hover ? t.hairline : const Color(0x00000000));
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => _release(),
+        onTapCancel: _release,
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.9 : 1.0,
+          duration: const Duration(milliseconds: 90),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 90),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              color: bg,
+            ),
+            child: Icon(widget.icon, size: 14, color: color),
+          ),
         ),
       ),
     );
