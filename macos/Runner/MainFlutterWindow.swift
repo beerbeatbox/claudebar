@@ -37,6 +37,15 @@ final class PopoverBlurView: NSVisualEffectView {
 
   required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+  /// Purely decorative backdrop — never participate in hit-testing. Hover
+  /// events reach the FlutterView through its tracking areas regardless, but
+  /// clicks are routed through NSWindow.sendEvent → hitTest, where this view
+  /// (an overlapping sibling of the content view — an arrangement whose
+  /// hit-test order AppKit does not guarantee) can win and silently swallow
+  /// every mouseDown. Symptom: buttons in the popover highlight on hover but
+  /// do nothing when clicked.
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
   /// Inserts the blur below the window's content view. Called on every show
   /// rather than once at startup: window_manager's `setAsFrameless()` swaps
   /// the style mask, which makes AppKit rebuild the window's frame view and
