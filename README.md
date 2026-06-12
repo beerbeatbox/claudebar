@@ -5,9 +5,11 @@ usage as a live percentage, with a clean popover for the full breakdown —
 session (5h) + weekly (7d) windows, per-model weekly, plan badge, reset
 countdowns, and manual/auto refresh.
 
-It reads your **own** locally-stored Claude Code credentials (read-only) and
-calls the official OAuth usage endpoint. It never logs in, scrapes, or writes
-tokens back.
+It asks your installed **Claude Code CLI** for the numbers (`claude -p
+"/usage"` — handled locally by the CLI, free, no model call), falling back to
+reading your **own** locally-stored Claude Code credentials (read-only) and
+calling the official OAuth usage endpoint. It never logs in, scrapes, or
+writes tokens back.
 
 ---
 
@@ -50,12 +52,17 @@ brew install create-dmg
 Without it the script falls back to plain `hdiutil`: the DMG still contains
 the app plus an `/Applications` symlink, just with Finder's default layout.
 
-### First-run Keychain prompt
+### Keychain prompt (fallback path only)
 
-On first launch macOS asks whether ClaudeBar may read the
-`Claude Code-credentials` Keychain item. Click **Always Allow** to silence it
-(Keychain Access → login → `Claude Code-credentials` → Access Control). This is
-expected and required — without it the popover shows “Keychain access needed”.
+ClaudeBar normally never touches the Keychain: it gets usage from the
+`claude` CLI, which reads its own credentials in-process. Only when the CLI
+is missing or its output can't be parsed does ClaudeBar fall back to reading
+the `Claude Code-credentials` Keychain item directly — and on that path macOS
+asks for permission. Click **Always Allow** to silence it (Keychain Access →
+login → `Claude Code-credentials` → Access Control). Note that "Always Allow"
+may not stick on machines where Claude Code recreates the item on token
+rotation (the ACL is wiped each time) — which is exactly why the CLI path is
+the default.
 
 ---
 
@@ -69,9 +76,10 @@ lib/
 │   ├── tray_controller.dart    # status-item title (%) + context menu
 │   └── measure_size.dart       # size the window to its content
 ├── data/
-│   ├── keychain.dart           # MethodChannel → Swift Keychain read
+│   ├── cli_usage_source.dart   # spawn `claude -p "/usage"` → UsageSnapshot (primary)
+│   ├── keychain.dart           # MethodChannel → Swift Keychain read (fallback)
 │   ├── credentials_reader.dart # file first, then Keychain; decode + scope check
-│   └── usage_api.dart          # GET /api/oauth/usage → UsageSnapshot
+│   └── usage_api.dart          # GET /api/oauth/usage → UsageSnapshot (fallback)
 ├── models/                     # usage_window, usage_snapshot, credentials, usage_error
 ├── state/
 │   └── usage_controller.dart   # Riverpod Notifier: refresh timer + snapshot/error

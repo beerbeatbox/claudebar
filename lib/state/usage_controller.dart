@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/cli_usage_source.dart';
 import '../data/credentials_reader.dart';
 import '../data/usage_api.dart';
 import '../models/usage_error.dart';
@@ -63,6 +64,10 @@ final credentialsReaderProvider = Provider<CredentialsReader>(
   (ref) => CredentialsReader(),
 );
 
+final cliUsageSourceProvider = Provider<CliUsageSource>(
+  (ref) => CliUsageSource(),
+);
+
 final usageApiProvider = Provider<UsageApi>((ref) => UsageApi());
 
 class UsageController extends Notifier<UsageState> {
@@ -118,6 +123,20 @@ class UsageController extends Notifier<UsageState> {
 
     if (kFakeUsage) {
       state = UsageState(snapshot: _fakeSnapshot(), loading: false);
+      _lock(_cooldown);
+      return;
+    }
+
+    // CLI-first: `claude -p "/usage"` reads credentials inside Claude Code's
+    // own process, so it can never trip the macOS Keychain password prompt —
+    // the item's ACL only gates *other* apps, and on some machines Claude
+    // Code wipes that ACL on every token rotation, which made "Always Allow"
+    // not stick. Falls back to the Keychain + API path below when the CLI is
+    // missing, logged out, or its output changes shape.
+    final cliSnapshot = await ref.read(cliUsageSourceProvider).fetch();
+    if (cliSnapshot != null) {
+      _backoff = Duration.zero;
+      state = UsageState(snapshot: cliSnapshot, loading: false);
       _lock(_cooldown);
       return;
     }
