@@ -35,7 +35,9 @@ final class PopoverBlurView: NSVisualEffectView {
 
   override init(frame: NSRect) {
     super.init(frame: frame)
-    material = .menu
+    // .fullScreenUI is the most see-through of the appearance-adaptive
+    // materials — .menu reads almost solid, hiding the desktop behind.
+    material = .fullScreenUI
     blendingMode = .behindWindow
     // The popover is a non-activating panel, so it never counts as the active
     // window; without forcing .active the material renders flat and opaque.
