@@ -5,10 +5,18 @@ import Security
 /// Native frosted-glass backdrop for the popover card, like a real macOS menu.
 ///
 /// Flutter's BackdropFilter can only blur Flutter's own pixels; blurring the
-/// desktop behind the window requires an AppKit NSVisualEffectView sitting
-/// below the (transparent) FlutterView. It is masked to the same
-/// bubble-with-arrow shape the Dart side paints, so the blur never leaks into
-/// the transparent shadow gutter around the card.
+/// desktop behind the window requires an AppKit NSVisualEffectView. It is
+/// masked to the same bubble-with-arrow shape the Dart side paints, so the
+/// blur never leaks into the transparent shadow gutter around the card.
+///
+/// Placement is delicate — both in-window homes are broken:
+/// - In the frame view (contentView.superview) AppKit stops routing mouse
+///   events to the content view entirely; every click in the popover goes
+///   dead.
+/// - Inside the layer-backed Flutter hierarchy, behind-window blending
+///   silently falls back to a flat opaque fill — no desktop shows through.
+/// So it lives in [BlurBackdropWindow], a click-through child window ordered
+/// just below the popover panel.
 final class PopoverBlurView: NSVisualEffectView {
   // Card geometry mirrored from popover_panel.dart / popover_window.dart:
   // 40 pt side gutter, 64 pt bottom gutter, 8 pt arrow, 9 pt arrow half-width,
@@ -36,19 +44,6 @@ final class PopoverBlurView: NSVisualEffectView {
   }
 
   required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-  /// Inserts the blur below the window's content view. Called on every show
-  /// rather than once at startup: window_manager's `setAsFrameless()` swaps
-  /// the style mask, which makes AppKit rebuild the window's frame view and
-  /// silently drop any subview installed there earlier.
-  func attach(to window: NSWindow) {
-    guard let contentView = window.contentView,
-          let themeFrame = contentView.superview,
-          superview !== themeFrame
-    else { return }
-    frame = contentView.frame
-    themeFrame.addSubview(self, positioned: .below, relativeTo: contentView)
-  }
 
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
@@ -91,6 +86,56 @@ final class PopoverBlurView: NSVisualEffectView {
     arrow.close()
     path.append(arrow)
     return path
+  }
+}
+
+/// Borderless, click-through window that carries [PopoverBlurView] and rides
+/// just below the popover panel as its child window. Being a plain window of
+/// its own gives the effect view a non-layer-backed home where behind-window
+/// blending actually blurs the desktop, and `ignoresMouseEvents` guarantees
+/// it can never intercept a click meant for the popover.
+final class BlurBackdropWindow: NSWindow {
+  let blurView = PopoverBlurView(frame: .zero)
+
+  init() {
+    super.init(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false)
+    isOpaque = false
+    backgroundColor = .clear
+    hasShadow = false
+    ignoresMouseEvents = true
+    animationBehavior = .none
+    // Follow the popover onto whichever Space/display it appears on.
+    collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    contentView = blurView
+  }
+
+  /// Pins this window exactly under [panel] and keeps it there: child windows
+  /// move with their parent, and resize/move notifications cover the popover's
+  /// content-height changes while visible.
+  func attach(below panel: NSWindow) {
+    let sync = { [weak self, weak panel] (_: Notification) in
+      guard let self, let panel else { return }
+      self.setFrame(panel.frame, display: true)
+    }
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResizeNotification, object: panel, queue: .main, using: sync)
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didMoveNotification, object: panel, queue: .main, using: sync)
+  }
+
+  func show(under panel: NSWindow) {
+    setFrame(panel.frame, display: true)
+    level = panel.level
+    panel.addChildWindow(self, ordered: .below)
+  }
+
+  func hide(from panel: NSWindow) {
+    panel.removeChildWindow(self)
+    orderOut(nil)
   }
 }
 
@@ -139,10 +184,10 @@ class MainFlutterWindow: NSPanel {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
-    // Frosted backdrop behind the (transparent) FlutterView; attached lazily
-    // on each show because style-mask changes rebuild the frame view it
-    // lives in (see PopoverBlurView.attach).
-    let blurView = PopoverBlurView(frame: self.frame)
+    // Frosted backdrop in its own click-through child window (see
+    // BlurBackdropWindow for why it cannot live inside this one).
+    let backdrop = BlurBackdropWindow()
+    backdrop.attach(below: self)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
@@ -153,7 +198,7 @@ class MainFlutterWindow: NSPanel {
     PopoverChannel.register(
       with: flutterViewController.registrar(forPlugin: "PopoverChannel"),
       window: self,
-      blur: blurView
+      backdrop: backdrop
     )
 
     super.awakeFromNib()
@@ -174,28 +219,32 @@ enum PopoverChannel {
   static func register(
     with registrar: FlutterPluginRegistrar,
     window: NSWindow,
-    blur: PopoverBlurView?
+    backdrop: BlurBackdropWindow
   ) {
     let channel = FlutterMethodChannel(
       name: channelName,
       binaryMessenger: registrar.messenger
     )
-    // `blur` is captured strongly on purpose: until the first show it has no
-    // superview, so a weak reference would let it deallocate immediately.
+    // `backdrop` is captured strongly on purpose: nothing else owns it.
     channel.setMethodCallHandler { [weak window] call, result in
       switch call.method {
       case "show":
-        if let window { blur?.attach(to: window) }
-        window?.makeKeyAndOrderFront(nil)
+        if let window {
+          window.makeKeyAndOrderFront(nil)
+          backdrop.show(under: window)
+        }
         result(true)
       case "hide":
-        window?.orderOut(nil)
+        if let window {
+          backdrop.hide(from: window)
+          window.orderOut(nil)
+        }
         result(true)
       // Keeps the blur mask's arrow under the status item; the Dart
       // positioner sends the same arrowFromRight it hands to the painter.
       case "setArrow":
         if let fromRight = call.arguments as? Double {
-          blur?.arrowFromRight = CGFloat(fromRight)
+          backdrop.blurView.arrowFromRight = CGFloat(fromRight)
         }
         result(true)
       default:
