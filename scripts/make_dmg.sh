@@ -30,10 +30,19 @@ mkdir -p "$DMG_DIR"
 rm -f "$DMG_PATH"
 
 if command -v create-dmg >/dev/null 2>&1; then
+  # Render the window background (1x + 2x merged into a Retina TIFF).
+  # Icon coordinates below must match the layout in make_dmg_background.swift.
+  BG_PATH="${DMG_DIR}/dmg-background.tiff"
+  swift scripts/make_dmg_background.swift "$DMG_DIR"
+  tiffutil -cathidpicheck "${DMG_DIR}/dmg-bg.png" "${DMG_DIR}/dmg-bg@2x.png" \
+    -out "$BG_PATH" 2>/dev/null
+  rm -f "${DMG_DIR}/dmg-bg.png" "${DMG_DIR}/dmg-bg@2x.png"
+
   # create-dmg exits 2 when the app is unsigned but the DMG is still written;
   # tolerate that and verify the file afterwards.
   create-dmg \
     --volname "$APP_NAME" \
+    --background "$BG_PATH" \
     --window-pos 200 120 \
     --window-size 600 400 \
     --icon-size 128 \
