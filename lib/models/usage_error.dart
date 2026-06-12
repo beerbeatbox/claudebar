@@ -1,23 +1,25 @@
 /// The distinct failure modes ClaudeBar surfaces, each mapped to a clear
 /// user-facing message and menu-bar label (spec §11).
+///
+/// All usage flows through the `claude` CLI, so the kinds mirror the ways a
+/// CLI probe can fail — classified by CliUsageSource so each one gets the
+/// right UX instead of a silent fallback that would mask the cause.
 enum UsageErrorKind {
-  /// No `~/.claude/.credentials.json` and nothing in the Keychain.
+  /// The `claude` binary couldn't be found on this machine.
+  cliMissing,
+
+  /// The CLI is installed but reports it isn't signed in.
   noCredentials,
 
-  /// Token present but lacks the `user:profile` scope needed for usage.
-  missingScope,
-
-  /// Endpoint returned 401 — token expired.
-  expiredToken,
-
-  /// Endpoint returned 429 — too many requests, back off before retrying.
-  rateLimited,
-
-  /// Network failure / non-401 HTTP error.
+  /// The CLI ran but couldn't reach Anthropic (machine offline, or the API
+  /// is unreachable).
   network,
 
-  /// Keychain access was denied by the user.
-  keychainDenied,
+  /// The CLI replied, we're online and signed in — but the `/usage` output
+  /// didn't match the shape this version of ClaudeBar understands. Usually
+  /// means a Claude Code update changed the wording; fail loud so it gets
+  /// noticed and fixed, rather than degrading silently.
+  parseFailed,
 
   /// Anything we didn't anticipate.
   unknown,
@@ -32,20 +34,12 @@ class UsageError {
   /// Short text for the menu-bar status item.
   String get menuBarLabel {
     switch (kind) {
+      case UsageErrorKind.cliMissing:
+        return 'No CLI';
       case UsageErrorKind.noCredentials:
         return 'Sign in';
-      case UsageErrorKind.missingScope:
-        return 'Re-auth';
-      case UsageErrorKind.expiredToken:
-        return 'Expired';
-      case UsageErrorKind.keychainDenied:
-        return 'Locked';
-      case UsageErrorKind.rateLimited:
-      // A 429 on the usage endpoint isn't a quota limit — showing 'Limited'
-      // here reads as "you're out of usage", which it isn't. Fall through to
-      // the neutral '--%'; the popover's "Rate limited" copy carries the
-      // real explanation with context.
       case UsageErrorKind.network:
+      case UsageErrorKind.parseFailed:
       case UsageErrorKind.unknown:
         return '--%';
     }
@@ -54,50 +48,36 @@ class UsageError {
   /// Heading + body for the popover status state.
   String get title {
     switch (kind) {
+      case UsageErrorKind.cliMissing:
+        return 'Claude Code not found';
       case UsageErrorKind.noCredentials:
         return 'Sign in to Claude Code';
-      case UsageErrorKind.missingScope:
-        return 'Re-authenticate';
-      case UsageErrorKind.expiredToken:
-        return 'Re-authenticate';
-      case UsageErrorKind.keychainDenied:
-        return 'Keychain access needed';
-      case UsageErrorKind.rateLimited:
-        return 'Rate limited';
       case UsageErrorKind.network:
         return 'Can’t reach Anthropic';
+      case UsageErrorKind.parseFailed:
+        return 'Update ClaudeBar?';
       case UsageErrorKind.unknown:
         return 'Something went wrong';
     }
   }
+
+  static const cliMissing = UsageError(
+    UsageErrorKind.cliMissing,
+    'ClaudeBar reads usage from the claude CLI, which wasn’t found on this Mac. Install Claude Code and sign in, then right-click the menu-bar icon → Refresh.',
+  );
 
   static const noCredentials = UsageError(
     UsageErrorKind.noCredentials,
     'Sign in to Claude Code — ClaudeBar will pick it up shortly, or right-click the menu-bar icon → Refresh.',
   );
 
-  static const missingScope = UsageError(
-    UsageErrorKind.missingScope,
-    'This token can’t read usage — re-authenticate in Claude Code.',
-  );
-
-  static const expiredToken = UsageError(
-    UsageErrorKind.expiredToken,
-    'Your session token expired. Open Claude Code to refresh it — ClaudeBar will pick it up shortly, or right-click the menu-bar icon → Refresh.',
-  );
-
-  static const keychainDenied = UsageError(
-    UsageErrorKind.keychainDenied,
-    'Allow ClaudeBar to read “Claude Code-credentials” in Keychain Access → login → Access Control.',
-  );
-
-  static const rateLimited = UsageError(
-    UsageErrorKind.rateLimited,
-    'Anthropic asked us to slow down. ClaudeBar will retry by itself — no need to press Refresh.',
-  );
-
   static const network = UsageError(
     UsageErrorKind.network,
     'Couldn’t reach the usage endpoint. Showing the last reading.',
+  );
+
+  static const parseFailed = UsageError(
+    UsageErrorKind.parseFailed,
+    'Couldn’t understand Claude Code’s /usage reply — a Claude Code update may have changed its format. Check for a newer ClaudeBar.',
   );
 }

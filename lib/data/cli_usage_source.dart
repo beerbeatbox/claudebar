@@ -4,20 +4,35 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
 import '../models/usage_window.dart';
 
-/// Fetches usage by spawning `claude -p "/usage" --output-format json`
-/// instead of reading the Keychain.
+/// Result of a CLI usage probe: a snapshot, or a classified [UsageError].
+class CliUsageResult {
+  final UsageSnapshot? snapshot;
+  final UsageError? error;
+
+  const CliUsageResult.ok(this.snapshot) : error = null;
+  const CliUsageResult.fail(this.error) : snapshot = null;
+
+  bool get isOk => snapshot != null;
+}
+
+/// Fetches usage by spawning `claude -p "/usage" --output-format json` —
+/// the app's only usage source.
 ///
 /// Claude Code reads its own credentials in-process, so this path can never
 /// trigger the macOS Keychain password prompt — even on machines where
 /// Claude Code recreates its keychain item and wipes the ACL (the root cause
-/// of the repeated prompts some users see; see CodexBar issue #340 for the
+/// of the repeated prompts some users saw; see CodexBar issue #340 for the
 /// same failure mode). The `/usage` slash command is handled locally by the
 /// CLI (`num_turns: 0`, `total_cost_usd: 0`), so probes are free, hit no
-/// model, and take ~0.5s. On any failure the controller falls back to the
-/// Keychain + API path, so the worst case equals the old behavior.
+/// model, and take ~0.5s.
+///
+/// There is deliberately no Keychain/API fallback: a silent fallback would
+/// mask a CLI format change (and quietly bring the password prompts back),
+/// so failures are classified instead — see [_classifyFailure].
 class CliUsageSource {
   CliUsageSource({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
@@ -41,34 +56,65 @@ class CliUsageSource {
   /// `~/.claude/projects` directory-name encoding stays unsurprising.
   static const _probeDir = '/tmp/claudebar-usage-probe';
 
-  /// Returns a fresh snapshot, or null when the CLI path is unavailable
-  /// (binary missing, logged out, output shape changed) — the caller then
-  /// falls back to the Keychain + API path.
-  Future<UsageSnapshot?> fetch() async {
+  /// Returns a fresh snapshot, or a [UsageError] describing why the probe
+  /// failed — classified so the UI can say the right thing for each cause.
+  Future<CliUsageResult> fetch() async {
     // flutter_tester would happily spawn the real CLI on the dev machine —
-    // keep widget tests hermetic.
-    if (Platform.environment['FLUTTER_TEST'] == 'true') return null;
+    // keep widget tests hermetic. noCredentials renders the same harmless
+    // "Sign in" state tests saw before.
+    if (Platform.environment['FLUTTER_TEST'] == 'true') {
+      return const CliUsageResult.fail(UsageError.noCredentials);
+    }
+
+    if (await _resolveBinary() == null) {
+      return const CliUsageResult.fail(UsageError.cliMissing);
+    }
 
     final out = await _run(['-p', '/usage', '--output-format', 'json']);
-    if (out == null) return null;
+    String? text;
+    if (out != null) {
+      final envelope = decodeEnvelope(out);
+      if (envelope != null && envelope['is_error'] != true) {
+        final result = envelope['result'];
+        if (result is String) {
+          text = result;
+          // Each print-mode run records a session under ~/.claude/projects;
+          // at one probe per refresh that would pile up ~300 stub files a
+          // day. Delete the one we just created — identified by its exact
+          // session id, so no other session can ever be touched.
+          final sessionId = envelope['session_id'];
+          if (sessionId is String) unawaited(_deleteProbeSession(sessionId));
+        }
+      }
+    }
 
-    final envelope = decodeEnvelope(out);
-    if (envelope == null || envelope['is_error'] == true) return null;
-    final text = envelope['result'];
-    if (text is! String) return null;
-
-    // Each print-mode run records a session under ~/.claude/projects; at one
-    // probe per refresh that would pile up ~300 stub files a day. Delete the
-    // one we just created — identified by its exact session id, so no other
-    // session can ever be touched.
-    final sessionId = envelope['session_id'];
-    if (sessionId is String) unawaited(_deleteProbeSession(sessionId));
-
-    final snapshot = parseUsageText(text, plan: await _planLabel(), now: _now());
-    if (snapshot == null) {
+    if (text != null) {
+      final snapshot =
+          parseUsageText(text, plan: await _planLabel(), now: _now());
+      if (snapshot != null) return CliUsageResult.ok(snapshot);
       debugPrint('[ClaudeBar] /usage output did not match the expected shape');
     }
-    return snapshot;
+    return CliUsageResult.fail(await _classifyFailure());
+  }
+
+  /// Runs only when a probe failed (rare): works out *why*, so each cause
+  /// gets the right message instead of a generic error.
+  Future<UsageError> _classifyFailure() async {
+    // Signed out? `auth status` is answered locally, so it works offline.
+    final out = await _run(['auth', 'status', '--json']);
+    if (out != null && decodeEnvelope(out)?['loggedIn'] == false) {
+      return UsageError.noCredentials;
+    }
+    // Offline? If the API host doesn't resolve, the CLI failed for the same
+    // reason — keep-last-known is the right UX, not "update the app".
+    try {
+      await InternetAddress.lookup('api.anthropic.com')
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return UsageError.network;
+    }
+    // Online, signed in, CLI present — the output shape must have changed.
+    return UsageError.parseFailed;
   }
 
   // ---- parsing (pure, unit-tested) ----
@@ -265,7 +311,7 @@ class CliUsageSource {
   }
 
   /// Plan badge text via `claude auth status --json` (subscriptionType),
-  /// mirroring ClaudeCredentials.planLabel. Cached after the first success.
+  /// e.g. "max" → "Max". Cached after the first success.
   Future<String> _planLabel() async {
     final cached = _plan;
     if (cached != null) return cached;

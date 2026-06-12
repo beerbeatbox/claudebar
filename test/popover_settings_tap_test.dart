@@ -1,6 +1,6 @@
 // Regression test: tapping the settings gear must switch the popover to the
-// SettingsPanel. Run with --dart-define=CLAUDEBAR_FAKE_USAGE=true so the
-// usage controller never touches the Keychain channel.
+// SettingsPanel. The usage controller's CLI source is inert under
+// flutter_tester (FLUTTER_TEST guard), so no real `claude` is spawned.
 
 import 'package:claude_usage_bar/settings/prefs.dart';
 import 'package:claude_usage_bar/ui/popover_panel.dart';

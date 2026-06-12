@@ -117,20 +117,10 @@ class _UsageView extends StatelessWidget {
         if (snapshot == null && state.loading)
           _LoadingBody(t: t)
         else if (snapshot == null && error != null)
-          _StatusBody(error: error, t: t, retryAt: state.lockedUntil)
+          _StatusBody(error: error, t: t)
         else if (snapshot != null) ...[
           if (snapshot.stale)
-            _OfflineRow(
-              t: t,
-              message:
-                  error?.kind == UsageErrorKind.rateLimited
-                      ? 'Rate limited — showing last sync'
-                      : 'Offline — showing last sync',
-              retryAt:
-                  error?.kind == UsageErrorKind.rateLimited
-                      ? state.lockedUntil
-                      : null,
-            ),
+            _OfflineRow(t: t, message: 'Offline — showing last sync'),
           MeterRow(
             window: snapshot.session,
             stale: snapshot.stale,
@@ -181,10 +171,7 @@ class _OfflineRow extends StatelessWidget {
   final ClaudeTokens t;
   final String message;
 
-  /// When set, an auto-retry countdown ticks alongside the message (429).
-  final DateTime? retryAt;
-
-  const _OfflineRow({required this.t, required this.message, this.retryAt});
+  const _OfflineRow({required this.t, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -195,17 +182,10 @@ class _OfflineRow extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-              color: retryAt != null ? t.amber : t.text3,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: t.text3, shape: BoxShape.circle),
           ),
           const SizedBox(width: 9),
           Text(message, style: TextStyle(fontSize: 12, color: t.text2)),
-          if (retryAt != null) ...[
-            const SizedBox(width: 6),
-            _RetryCountdown(until: retryAt!, t: t),
-          ],
         ],
       ),
     );
@@ -216,16 +196,10 @@ class _StatusBody extends StatelessWidget {
   final UsageError error;
   final ClaudeTokens t;
 
-  /// When the controller will retry by itself (the 429 backoff window) —
-  /// shown as a live countdown so nobody feels the need to mash Refresh.
-  final DateTime? retryAt;
-
-  const _StatusBody({required this.error, required this.t, this.retryAt});
+  const _StatusBody({required this.error, required this.t});
 
   @override
   Widget build(BuildContext context) {
-    final showRetry =
-        error.kind == UsageErrorKind.rateLimited && retryAt != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6, top: 2),
       child: Column(
@@ -257,55 +231,7 @@ class _StatusBody extends StatelessWidget {
             error.message,
             style: TextStyle(fontSize: 12, height: 1.45, color: t.text2),
           ),
-          if (showRetry) ...[
-            const SizedBox(height: 6),
-            _RetryCountdown(until: retryAt!, t: t),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-/// Ticking "Retrying in m:ss" line for the rate-limited state.
-class _RetryCountdown extends StatefulWidget {
-  final DateTime until;
-  final ClaudeTokens t;
-  const _RetryCountdown({required this.until, required this.t});
-
-  @override
-  State<_RetryCountdown> createState() => _RetryCountdownState();
-}
-
-class _RetryCountdownState extends State<_RetryCountdown> {
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final left = widget.until.difference(DateTime.now());
-    if (left.isNegative) return const SizedBox.shrink();
-    final m = left.inMinutes;
-    final s = left.inSeconds % 60;
-    return Text(
-      'Retrying in $m:${s.toString().padLeft(2, '0')}',
-      style: TextStyle(
-        fontSize: 12,
-        color: widget.t.text3,
-        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }

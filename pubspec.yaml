@@ -22,9 +22,8 @@ dependencies:
   screen_retriever: ^0.2.0
   launch_at_startup: ^0.5.1
 
-  # Persistence, networking, formatting
+  # Persistence, formatting
   shared_preferences: ^2.3.2
-  http: ^1.2.2
   intl: ^0.20.2
 
 dev_dependencies:

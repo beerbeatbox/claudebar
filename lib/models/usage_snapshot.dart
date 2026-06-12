@@ -10,7 +10,7 @@ class UsageSnapshot {
   final UsageWindow? sonnet;
   final UsageWindow? opus;
 
-  /// Plan label inferred from the credentials, e.g. "Max", "Pro".
+  /// Plan label from `claude auth status`, e.g. "Max", "Pro".
   final String plan;
 
   final DateTime fetchedAt;

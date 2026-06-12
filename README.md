@@ -6,10 +6,9 @@ session (5h) + weekly (7d) windows, per-model weekly, plan badge, reset
 countdowns, and manual/auto refresh.
 
 It asks your installed **Claude Code CLI** for the numbers (`claude -p
-"/usage"` — handled locally by the CLI, free, no model call), falling back to
-reading your **own** locally-stored Claude Code credentials (read-only) and
-calling the official OAuth usage endpoint. It never logs in, scrapes, or
-writes tokens back.
+"/usage"` — handled locally by the CLI, free, no model call). ClaudeBar never
+touches your credentials, the Keychain, or the network itself — Claude Code
+answers with its own token, in its own process.
 
 ---
 
@@ -18,8 +17,8 @@ writes tokens back.
 - macOS 14+ (Apple Silicon or Intel)
 - **FVM** pinned to Flutter **3.41.6** (`.fvmrc`) — same as the sibling
   projects. Run `fvm install` if the SDK isn't cached yet.
-- A signed-in Claude Code on the same machine (credentials in the login
-  Keychain or `~/.claude/.credentials.json`).
+- The **Claude Code CLI** installed and signed in on the same machine —
+  ClaudeBar gets all usage data by asking it directly.
 
 ## Run & build (RPS scripts)
 
@@ -52,17 +51,15 @@ brew install create-dmg
 Without it the script falls back to plain `hdiutil`: the DMG still contains
 the app plus an `/Applications` symlink, just with Finder's default layout.
 
-### Keychain prompt (fallback path only)
+### No Keychain access
 
-ClaudeBar normally never touches the Keychain: it gets usage from the
-`claude` CLI, which reads its own credentials in-process. Only when the CLI
-is missing or its output can't be parsed does ClaudeBar fall back to reading
-the `Claude Code-credentials` Keychain item directly — and on that path macOS
-asks for permission. Click **Always Allow** to silence it (Keychain Access →
-login → `Claude Code-credentials` → Access Control). Note that "Always Allow"
-may not stick on machines where Claude Code recreates the item on token
-rotation (the ACL is wiped each time) — which is exactly why the CLI path is
-the default.
+ClaudeBar does not read the macOS Keychain at all — usage comes from the
+`claude` CLI, which reads its own credentials inside its own process. There
+is no fallback path on purpose: a silent fallback would mask a CLI format
+change (and quietly bring back the Keychain password prompts this design
+eliminates). If a probe fails, the app says exactly why instead: Claude Code
+not installed, signed out, offline (keeps showing the last reading), or
+"/usage" output changed shape (check for a ClaudeBar update).
 
 ---
 
@@ -76,11 +73,8 @@ lib/
 │   ├── tray_controller.dart    # status-item title (%) + context menu
 │   └── measure_size.dart       # size the window to its content
 ├── data/
-│   ├── cli_usage_source.dart   # spawn `claude -p "/usage"` → UsageSnapshot (primary)
-│   ├── keychain.dart           # MethodChannel → Swift Keychain read (fallback)
-│   ├── credentials_reader.dart # file first, then Keychain; decode + scope check
-│   └── usage_api.dart          # GET /api/oauth/usage → UsageSnapshot (fallback)
-├── models/                     # usage_window, usage_snapshot, credentials, usage_error
+│   └── cli_usage_source.dart   # spawn `claude -p "/usage"` → UsageSnapshot, classify failures
+├── models/                     # usage_window, usage_snapshot, usage_error
 ├── state/
 │   └── usage_controller.dart   # Riverpod Notifier: refresh timer + snapshot/error
 ├── settings/
@@ -92,13 +86,11 @@ State management is **Riverpod** (house style). One `UsageController` owns the
 refresh timer and the latest `UsageSnapshot`/error; both the tray and the
 popover listen to it.
 
-The Keychain bridge is a `MethodChannel` (`claudebar/keychain`) handled in
-`macos/Runner/MainFlutterWindow.swift` (`SecItemCopyMatching`, read-only).
-
 `macos/Runner/Info.plist` sets `LSUIElement = true` (no Dock icon). The
-entitlements have **App Sandbox OFF** for v1 (`com.apple.security.network.client`
-only) so the app can read `~/.claude/*` and the foreign Keychain item — hence
-it is distributed outside the Mac App Store.
+entitlements have **App Sandbox OFF** (`com.apple.security.network.client`
+only) so the app can spawn the `claude` CLI and tidy up the session stubs its
+probes leave under `~/.claude/projects` — hence it is distributed outside the
+Mac App Store.
 
 ---
 

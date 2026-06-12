@@ -17,14 +17,14 @@ class _FakeCliSource extends CliUsageSource {
   int calls = 0;
 
   @override
-  Future<UsageSnapshot?> fetch() async {
+  Future<CliUsageResult> fetch() async {
     calls++;
-    return UsageSnapshot(
+    return CliUsageResult.ok(UsageSnapshot(
       session: const UsageWindow(percent: 35, label: 'Session · 5h'),
       weekly: const UsageWindow(percent: 28, label: 'Weekly · 7d'),
       plan: 'Max',
       fetchedAt: DateTime(2026, 6, 12, 22, 0),
-    );
+    ));
   }
 }
 
