@@ -106,7 +106,10 @@ class TrayController with TrayListener {
       if (snapshot.sonnet != null) items.add(_readonly(_windowLine(snapshot.sonnet!)));
       items.add(MenuItem.separator());
       items.add(_readonly('Plan: ${snapshot.plan}'));
-      if (snapshot.stale) items.add(_readonly('Offline — last sync ${Fmt.updated(snapshot.fetchedAt).substring(8)}'));
+      if (snapshot.stale) {
+        final reason = state.error?.staleReason ?? 'Offline';
+        items.add(_readonly('$reason — last sync ${Fmt.updated(snapshot.fetchedAt).substring(8)}'));
+      }
     } else if (state.error != null) {
       items.add(_readonly(state.error!.title));
     } else {

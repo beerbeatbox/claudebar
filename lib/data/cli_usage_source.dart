@@ -72,12 +72,18 @@ class CliUsageSource {
 
     final out = await _run(['-p', '/usage', '--output-format', 'json']);
     String? text;
+    // True once the CLI hands back a successful envelope with a string result —
+    // i.e. it ran fine and answered. Distinguishes "answered but no usage lines"
+    // (a transient empty reply → noData) from "the CLI itself failed" (offline /
+    // crashed / format changed), which _classifyFailure handles separately.
+    var gotReply = false;
     if (out != null) {
       final envelope = decodeEnvelope(out);
       if (envelope != null && envelope['is_error'] != true) {
         final result = envelope['result'];
         if (result is String) {
           text = result;
+          gotReply = true;
           // Each print-mode run records a session under ~/.claude/projects;
           // at one probe per refresh that would pile up ~300 stub files a
           // day. Delete the one we just created — identified by its exact
@@ -94,17 +100,23 @@ class CliUsageSource {
       if (snapshot != null) return CliUsageResult.ok(snapshot);
       debugPrint('[ClaudeBar] /usage output did not match the expected shape');
     }
-    return CliUsageResult.fail(await _classifyFailure());
+    return CliUsageResult.fail(await _classifyFailure(gotReply: gotReply));
   }
 
   /// Runs only when a probe failed (rare): works out *why*, so each cause
-  /// gets the right message instead of a generic error.
-  Future<UsageError> _classifyFailure() async {
+  /// gets the right message instead of a generic error. [gotReply] means the
+  /// CLI answered with a string result that simply lacked the usage lines.
+  Future<UsageError> _classifyFailure({required bool gotReply}) async {
     // Signed out? `auth status` is answered locally, so it works offline.
     final out = await _run(['auth', 'status', '--json']);
     if (out != null && decodeEnvelope(out)?['loggedIn'] == false) {
       return UsageError.noCredentials;
     }
+    // The CLI answered, we're signed in — it just didn't carry the numbers
+    // (the print-mode /usage probe often returns its preamble before the
+    // fetch lands). That's the common transient case, distinct from a genuine
+    // format change: keep-last-known and retry, don't cry "update the app".
+    if (gotReply) return UsageError.noData;
     // Offline? If the API host doesn't resolve, the CLI failed for the same
     // reason — keep-last-known is the right UX, not "update the app".
     try {
@@ -113,7 +125,8 @@ class CliUsageSource {
     } catch (_) {
       return UsageError.network;
     }
-    // Online, signed in, CLI present — the output shape must have changed.
+    // Online, signed in, CLI present, but produced no parsable reply at all —
+    // the output shape must have changed.
     return UsageError.parseFailed;
   }
 

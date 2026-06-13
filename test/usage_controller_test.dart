@@ -4,6 +4,7 @@
 // the menu-bar title flash "–" until the next fetch landed.
 
 import 'package:claude_usage_bar/data/cli_usage_source.dart';
+import 'package:claude_usage_bar/models/usage_error.dart';
 import 'package:claude_usage_bar/models/usage_snapshot.dart';
 import 'package:claude_usage_bar/models/usage_window.dart';
 import 'package:claude_usage_bar/settings/prefs.dart';
@@ -59,5 +60,42 @@ void main() {
     expect(after.loading, isFalse);
     expect(cli.calls, 1,
         reason: 'interval change must not trigger an extra fetch');
+  });
+
+  // The fetch gate means a noData reply is the latest reading the CLI can give,
+  // so it's kept (and quietly retried) rather than flipped to "Offline" — but
+  // only within a grace window, and only for noData.
+  group('UsageController.keepLastFresh', () {
+    final now = DateTime(2026, 6, 13, 21, 0);
+
+    UsageSnapshot snapAt(DateTime t) => UsageSnapshot(
+          session: const UsageWindow(percent: 11, label: 'Session · 5h'),
+          weekly: const UsageWindow(percent: 6, label: 'Weekly · 7d'),
+          plan: 'Max',
+          fetchedAt: t,
+        );
+
+    test('keeps a recent reading on a gated (noData) reply', () {
+      final last = snapAt(now.subtract(const Duration(minutes: 3)));
+      expect(UsageController.keepLastFresh(UsageErrorKind.noData, last, now),
+          isTrue);
+    });
+
+    test('marks a long-gated reading stale once past the grace window', () {
+      final last = snapAt(now.subtract(const Duration(minutes: 12)));
+      expect(UsageController.keepLastFresh(UsageErrorKind.noData, last, now),
+          isFalse);
+    });
+
+    test('a real network failure goes stale immediately, however recent', () {
+      final last = snapAt(now.subtract(const Duration(seconds: 5)));
+      expect(UsageController.keepLastFresh(UsageErrorKind.network, last, now),
+          isFalse);
+    });
+
+    test('no prior reading is never "fresh"', () {
+      expect(UsageController.keepLastFresh(UsageErrorKind.noData, null, now),
+          isFalse);
+    });
   });
 }

@@ -1,8 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/cli_usage_source.dart';
+import '../data/usage_forecast.dart';
+import '../data/usage_history.dart';
+import '../data/usage_notifier.dart';
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
 import '../models/usage_window.dart';
@@ -67,8 +71,23 @@ class UsageController extends Notifier<UsageState> {
   /// that even a single extra request minutes after the last one can 429.
   static const _cooldown = Duration(seconds: 60);
 
+  /// The CLI gates its usage fetch to ~once every few minutes, keyed on the
+  /// last *successful* fetch and account-wide (the user's own Claude Code
+  /// sessions reset it too). A probe inside that window returns only the
+  /// preamble (UsageErrorKind.noData) — cheaply, with no API call and without
+  /// pushing the gate out. So on noData we retry on this short cadence to catch
+  /// the gate the moment it opens, instead of waiting out the full refresh
+  /// interval and staying stuck on the last reading.
+  static const _retryDelay = Duration(seconds: 45);
+
+  /// Keep showing the last good reading as current until it's older than this
+  /// (~2 fetch-gate cycles). Its "As of HH:MM" already carries the real age;
+  /// only past here is a noData failure worth the "No fresh reading" banner.
+  static const _staleAfter = Duration(minutes: 11);
+
   Timer? _timer;
   Timer? _unlockTimer;
+  Timer? _retryTimer;
   bool _refreshing = false;
 
   @override
@@ -78,6 +97,7 @@ class UsageController extends Notifier<UsageState> {
     ref.onDispose(() {
       _timer?.cancel();
       _unlockTimer?.cancel();
+      _retryTimer?.cancel();
     });
     _timer?.cancel();
     _timer = Timer.periodic(Duration(minutes: minutes), (_) => refresh());
@@ -95,8 +115,9 @@ class UsageController extends Notifier<UsageState> {
     return const UsageState.loading();
   }
 
-  /// Probes the CLI for usage and updates state. On failure the last
-  /// snapshot is kept and marked stale (spec §11).
+  /// Probes the CLI for usage and updates state. On failure the last snapshot
+  /// is kept (spec §11) — marked stale, except a gated [UsageErrorKind.noData]
+  /// reply, which stays current within its grace window and is retried fast.
   ///
   /// The app, not the caller, owns the request rate: calls are dropped while
   /// a fetch is in flight, during the post-success cooldown, and during a 429
@@ -105,6 +126,9 @@ class UsageController extends Notifier<UsageState> {
   Future<void> refresh() async {
     if (_refreshing || state.locked) return;
     _refreshing = true;
+    // A refresh is starting now — drop any queued fast retry; this run (or the
+    // success cooldown it sets) supersedes it.
+    _retryTimer?.cancel();
     try {
       await _refresh();
     } finally {
@@ -128,17 +152,68 @@ class UsageController extends Notifier<UsageState> {
     // fallback, which would mask which one happened.
     final result = await ref.read(cliUsageSourceProvider).fetch();
     if (result.isOk) {
-      state = UsageState(snapshot: result.snapshot, loading: false);
+      final previous = state.snapshot;
+      final fresh = result.snapshot!;
+      // History + forecast are best-effort. They run before publishing so
+      // forecastProvider (which recomputes off the new state) sees this reading
+      // — but a storage hiccup must never block the state update or, critically,
+      // the cooldown lock that protects the rate-limited endpoint.
+      Forecast? forecast;
+      try {
+        final history = ref.read(usageHistoryProvider);
+        await history.add(fresh);
+        forecast = Forecast.compute(fresh, history.samples);
+      } catch (_) {}
+      state = UsageState(snapshot: fresh, loading: false);
       _lock(_cooldown);
+      // Notifications are likewise best-effort.
+      try {
+        await ref.read(usageNotifierProvider).evaluate(
+              prev: previous,
+              next: fresh,
+              forecast: forecast,
+            );
+      } catch (_) {}
     } else {
-      // Keep-last-known: the previous snapshot stays up, marked stale,
-      // alongside the classified error (spec §11).
+      // Keep-last-known (spec §11). For a noData failure — the CLI answered but
+      // its fetch was gated — the last reading is still the latest available, so
+      // keep showing it as current until it's genuinely old (its "As of HH:MM"
+      // carries the age), and retry soon to catch the gate when it opens. Other
+      // failures (offline / signed out / format changed) mark it stale at once.
+      final err = result.error;
+      final last = state.snapshot;
+      final transient = err?.kind == UsageErrorKind.noData;
+      final fresh = keepLastFresh(err?.kind, last, DateTime.now());
       state = UsageState(
-        snapshot: _stale(),
-        error: result.error,
+        snapshot: fresh ? last : _stale(),
+        error: err,
         loading: false,
       );
+      if (transient) _scheduleRetry();
     }
+  }
+
+  /// One-shot fast retry after a gated (noData) probe, replacing any pending
+  /// one. Cheap — a gated probe makes no API call — so this just races to catch
+  /// the fetch gate the moment it reopens.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(_retryDelay, refresh);
+  }
+
+  /// Whether a failed refresh should keep showing [last] as the current reading
+  /// (true) or mark it stale (false). Only a gated [UsageErrorKind.noData] reply
+  /// — where the last reading is still the latest the CLI can offer — keeps the
+  /// reading, and only until it's older than [_staleAfter]. Every other failure,
+  /// or no prior reading, falls through to stale.
+  @visibleForTesting
+  static bool keepLastFresh(
+    UsageErrorKind? kind,
+    UsageSnapshot? last,
+    DateTime now,
+  ) {
+    if (kind != UsageErrorKind.noData || last == null) return false;
+    return now.difference(last.fetchedAt) < _staleAfter;
   }
 
   /// Blocks refreshes for [duration] and schedules the unlock.
@@ -178,3 +253,12 @@ class UsageController extends Notifier<UsageState> {
 final usageControllerProvider = NotifierProvider<UsageController, UsageState>(
   UsageController.new,
 );
+
+/// The burn-rate projection for the current (live) snapshot, recomputed
+/// whenever usage state changes. Null when offline, or when there isn't enough
+/// history yet to project from.
+final forecastProvider = Provider<Forecast?>((ref) {
+  final snapshot = ref.watch(usageControllerProvider).snapshot;
+  if (snapshot == null || snapshot.stale) return null;
+  return Forecast.compute(snapshot, ref.read(usageHistoryProvider).samples);
+});

@@ -13,17 +13,39 @@ class Settings {
   final MenuBarMetric metric;
   final bool launchAtLogin;
 
+  /// Notify when a window crosses 90% used.
+  final bool notifyCritical;
+
+  /// Notify when the burn rate projects the session filling within minutes.
+  final bool notifyUrgent;
+
+  /// Notify when the session quota resets and is ready again.
+  final bool notifyReset;
+
   const Settings({
     this.refreshMinutes = 5,
     this.metric = MenuBarMetric.session,
     this.launchAtLogin = false,
+    this.notifyCritical = true,
+    this.notifyUrgent = true,
+    this.notifyReset = true,
   });
 
-  Settings copyWith({int? refreshMinutes, MenuBarMetric? metric, bool? launchAtLogin}) {
+  Settings copyWith({
+    int? refreshMinutes,
+    MenuBarMetric? metric,
+    bool? launchAtLogin,
+    bool? notifyCritical,
+    bool? notifyUrgent,
+    bool? notifyReset,
+  }) {
     return Settings(
       refreshMinutes: refreshMinutes ?? this.refreshMinutes,
       metric: metric ?? this.metric,
       launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+      notifyCritical: notifyCritical ?? this.notifyCritical,
+      notifyUrgent: notifyUrgent ?? this.notifyUrgent,
+      notifyReset: notifyReset ?? this.notifyReset,
     );
   }
 }
@@ -37,6 +59,9 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
 const _kInterval = 'refreshMinutes';
 const _kMetric = 'menuBarMetric';
 const _kLaunch = 'launchAtLogin';
+const _kNotifyCritical = 'notifyCritical';
+const _kNotifyUrgent = 'notifyUrgent';
+const _kNotifyReset = 'notifyReset';
 
 class SettingsController extends Notifier<Settings> {
   @override
@@ -49,6 +74,9 @@ class SettingsController extends Notifier<Settings> {
       metric: MenuBarMetric.values[
           (prefs.getInt(_kMetric) ?? 0).clamp(0, MenuBarMetric.values.length - 1)],
       launchAtLogin: prefs.getBool(_kLaunch) ?? false,
+      notifyCritical: prefs.getBool(_kNotifyCritical) ?? true,
+      notifyUrgent: prefs.getBool(_kNotifyUrgent) ?? true,
+      notifyReset: prefs.getBool(_kNotifyReset) ?? true,
     );
   }
 
@@ -73,6 +101,21 @@ class SettingsController extends Notifier<Settings> {
     } else {
       await launchAtStartup.disable();
     }
+  }
+
+  Future<void> setNotifyCritical(bool value) async {
+    state = state.copyWith(notifyCritical: value);
+    await _prefs.setBool(_kNotifyCritical, value);
+  }
+
+  Future<void> setNotifyUrgent(bool value) async {
+    state = state.copyWith(notifyUrgent: value);
+    await _prefs.setBool(_kNotifyUrgent, value);
+  }
+
+  Future<void> setNotifyReset(bool value) async {
+    state = state.copyWith(notifyReset: value);
+    await _prefs.setBool(_kNotifyReset, value);
   }
 }
 

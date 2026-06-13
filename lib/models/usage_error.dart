@@ -15,6 +15,13 @@ enum UsageErrorKind {
   /// is unreachable).
   network,
 
+  /// The CLI answered fine but its `/usage` reply carried no usage lines —
+  /// just the preamble. In print mode the probe frequently returns before the
+  /// numbers are fetched (`duration_api_ms: 0`), so this is the common,
+  /// transient empty reply — NOT an outage and NOT a format change. Kept
+  /// distinct so the UI says "no fresh reading" instead of lying "Offline".
+  noData,
+
   /// The CLI replied, we're online and signed in — but the `/usage` output
   /// didn't match the shape this version of ClaudeBar understands. Usually
   /// means a Claude Code update changed the wording; fail loud so it gets
@@ -39,9 +46,30 @@ class UsageError {
       case UsageErrorKind.noCredentials:
         return 'Sign in';
       case UsageErrorKind.network:
+      case UsageErrorKind.noData:
       case UsageErrorKind.parseFailed:
       case UsageErrorKind.unknown:
         return '--%';
+    }
+  }
+
+  /// Short reason phrase for the row above a kept-but-stale snapshot, e.g.
+  /// "Offline" → "Offline — showing last sync". Names the *actual* cause so a
+  /// transient empty reply or a parse failure isn't mislabeled as "Offline".
+  String get staleReason {
+    switch (kind) {
+      case UsageErrorKind.cliMissing:
+        return 'CLI not found';
+      case UsageErrorKind.noCredentials:
+        return 'Signed out';
+      case UsageErrorKind.network:
+        return 'Offline';
+      case UsageErrorKind.noData:
+        return 'No fresh reading';
+      case UsageErrorKind.parseFailed:
+        return 'Couldn’t read usage';
+      case UsageErrorKind.unknown:
+        return 'Not updating';
     }
   }
 
@@ -54,6 +82,8 @@ class UsageError {
         return 'Sign in to Claude Code';
       case UsageErrorKind.network:
         return 'Can’t reach Anthropic';
+      case UsageErrorKind.noData:
+        return 'Usage data unavailable';
       case UsageErrorKind.parseFailed:
         return 'Update ClaudeBar?';
       case UsageErrorKind.unknown:
@@ -74,6 +104,11 @@ class UsageError {
   static const network = UsageError(
     UsageErrorKind.network,
     'Couldn’t reach the usage endpoint. Showing the last reading.',
+  );
+
+  static const noData = UsageError(
+    UsageErrorKind.noData,
+    'Claude Code answered but didn’t include usage this time. Showing the last reading — ClaudeBar will retry shortly.',
   );
 
   static const parseFailed = UsageError(

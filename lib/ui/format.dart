@@ -44,4 +44,19 @@ class Fmt {
 
   /// Whole-number percent with a % sign, e.g. "42%".
   static String pct(double percent) => '${percent.round()}%';
+
+  /// Burn rate as "≈14%/hr".
+  static String ratePerHour(double perHour) => '≈${perHour.round()}%/hr';
+
+  /// "full by 15:20" — the projected moment the session hits 100%.
+  static String fullBy(DateTime when) => 'full by ${DateFormat('HH:mm').format(when)}';
+
+  /// Compact "in ~18m" / "in ~2h" relative span for notifications. Floors at
+  /// "soon" once the moment has effectively arrived.
+  static String inApprox(DateTime when, {DateTime? now}) {
+    final diff = when.difference(now ?? DateTime.now());
+    if (diff.inMinutes < 1) return 'soon';
+    if (diff.inMinutes < 60) return 'in ~${diff.inMinutes}m';
+    return 'in ~${diff.inHours}h';
+  }
 }

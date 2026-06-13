@@ -81,6 +81,20 @@ void main() {
         isNull,
       );
     });
+
+    test('returns null on the preamble-only reply the GUI probe often gets', () {
+      // In a minimal (GUI-launch) environment `claude -p "/usage"` frequently
+      // returns just this header — no data lines — and the app must reject it
+      // (→ noData), not parse it as a partial snapshot.
+      expect(
+        CliUsageSource.parseUsageText(
+          'You are currently using your subscription to power your Claude Code usage',
+          plan: 'Max',
+          now: now,
+        ),
+        isNull,
+      );
+    });
   });
 
   group('CliUsageSource.decodeEnvelope', () {
