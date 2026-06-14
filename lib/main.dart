@@ -87,11 +87,37 @@ class ClaudeBarApp extends StatelessWidget {
         canvasColor: Colors.transparent,
         fontFamily: '.AppleSystemUIFont',
       ),
+      // The window is a fixed, pre-warmed height (it never shrinks — see
+      // PopoverWindow), so pin the card to the top and let the unused space
+      // below stay transparent. Stretch keeps the card full-width while the
+      // Column's default (max) main-axis size fills the taller window.
       home: Material(
         type: MaterialType.transparency,
-        child: MeasureSize(
-          onChange: (size) => _popover.setContentHeight(size.height),
-          child: Popover(onQuit: quitApp, arrowFromRight: _popover.arrowFromRight),
+        child: Stack(
+          children: [
+            // The window extends well below the card, so a tap in that empty
+            // region must dismiss — otherwise it reads as a dead/buggy click.
+            // It sits under the card in the stack, so taps on the card itself
+            // (and its widgets) are handled there first.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _popover.hide,
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                MeasureSize(
+                  onChange: (size) => _popover.setContentHeight(size.height),
+                  child: Popover(
+                    onQuit: quitApp,
+                    arrowFromRight: _popover.arrowFromRight,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

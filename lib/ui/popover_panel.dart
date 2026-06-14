@@ -42,40 +42,49 @@ class _PopoverState extends ConsumerState<Popover> {
     final state = ref.watch(usageControllerProvider);
     final forecast = ref.watch(forecastProvider);
 
-    return Container(
-      color: const Color(0x00000000),
+    // No fill colour here on purpose: the side/bottom gutter must stay
+    // hit-transparent so a tap there falls through to the dismiss layer behind
+    // the popover. Only the card itself (the GestureDetector below) swallows
+    // taps — clicking anywhere outside the card frame closes the popover.
+    return Padding(
       // Side/bottom padding must outrun the shadow: the 36-blur shadow stays
       // visible for ~2 sigma (~42pt) past the card edge, plus the 18pt
       // downward offset at the bottom — anything tighter clips the fade into
       // a hard rectangle. Top is 0 so the arrow tip touches the window's top
       // edge, which the positioner pins right under the menu bar.
       padding: const EdgeInsets.fromLTRB(40, 0, 40, 64),
-      child: ValueListenableBuilder<double>(
-        valueListenable: widget.arrowFromRight,
-        builder:
-            (context, fromRight, child) => CustomPaint(
-              painter: _BubblePainter(
-                color: t.cardBg,
-                border: t.cardBorder,
-                // fromRight measures from the window edge; the painter works
-                // in card coordinates, inside the 40pt transparent gutter.
-                arrowCenterFromRight: fromRight - 40,
+      child: GestureDetector(
+        // Opaque so the whole card frame swallows taps (keeping the popover
+        // open), while the inner buttons still win their own taps. Empty.
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: ValueListenableBuilder<double>(
+          valueListenable: widget.arrowFromRight,
+          builder:
+              (context, fromRight, child) => CustomPaint(
+                painter: _BubblePainter(
+                  color: t.cardBg,
+                  border: t.cardBorder,
+                  // fromRight measures from the window edge; the painter works
+                  // in card coordinates, inside the 40pt transparent gutter.
+                  arrowCenterFromRight: fromRight - 40,
+                ),
+                child: child,
               ),
-              child: child,
-            ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, _kArrowHeight + 16, 18, 14),
-          child:
-              _showSettings
-                  ? SettingsPanel(
-                    onBack: () => setState(() => _showSettings = false),
-                    onQuit: widget.onQuit,
-                  )
-                  : _UsageView(
-                    state: state,
-                    forecast: forecast,
-                    onSettings: () => setState(() => _showSettings = true),
-                  ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, _kArrowHeight + 16, 18, 14),
+            child:
+                _showSettings
+                    ? SettingsPanel(
+                      onBack: () => setState(() => _showSettings = false),
+                      onQuit: widget.onQuit,
+                    )
+                    : _UsageView(
+                      state: state,
+                      forecast: forecast,
+                      onSettings: () => setState(() => _showSettings = true),
+                    ),
+          ),
         ),
       ),
     );

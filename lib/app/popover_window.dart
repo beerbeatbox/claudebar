@@ -23,6 +23,16 @@ class PopoverWindow with WindowListener {
   // gutter clips the blur into a visible hard rectangle).
   static const double width = 380;
 
+  /// The window is kept at this height (or taller) and never shrinks, so
+  /// switching to a shorter view never resizes the Flutter render surface —
+  /// growing an NSWindow that hosts a FlutterView blocks the main thread up to
+  /// ~1s waiting on a Metal drawable. Pre-sizing to comfortably clear the
+  /// tallest view (Settings ≈ 544pt) means that grow happens once, off-screen
+  /// at launch, and never again while the popover is open. The card itself
+  /// hugs the top at its natural height; the extra space below stays
+  /// transparent (an extension of the existing shadow gutter).
+  static const double _prewarmHeight = 580;
+
   /// Where the arrow sits when nothing forces the window off-anchor:
   /// right padding (40) + 30pt into the card.
   static const double _preferredArrowFromRight = 70;
@@ -31,7 +41,12 @@ class PopoverWindow with WindowListener {
   /// 14pt corner radius + 9pt arrow half-width, plus a hair of slack.
   static const double _minArrowFromRight = 64;
 
-  double _height = 360;
+  /// High-water mark of the window height — grows to fit content, never shrinks.
+  double _windowHeight = _prewarmHeight;
+
+  /// Last card height pushed to the native blur mask, so a redundant resize can
+  /// be skipped.
+  double _cardHeight = 0;
   bool _ready = false;
 
   /// X of the point the arrow points at — the status item's centre — cached
@@ -50,7 +65,7 @@ class PopoverWindow with WindowListener {
     windowManager.addListener(this);
 
     const options = WindowOptions(
-      size: Size(width, 360),
+      size: Size(width, _prewarmHeight),
       center: false,
       backgroundColor: Color(0x00000000),
       skipTaskbar: true,
@@ -72,17 +87,28 @@ class PopoverWindow with WindowListener {
     _ready = true;
   }
 
-  /// Resizes the window to fit measured content height (width is fixed).
+  /// Reports the measured card height. The card is drawn hugging the top of the
+  /// fixed-height window; this drives the native blur mask so the frosted card
+  /// tracks the content, and only grows the window (never shrinks it) on the
+  /// rare occasion content is taller than the pre-warmed height.
   Future<void> setContentHeight(double height) async {
-    final h = height.ceilToDouble();
-    if ((h - _height).abs() < 1) return;
-    _height = h;
-    if (_ready) {
-      await windowManager.setSize(Size(width, h));
-      // Re-pin so the card stays under the menu bar after the resize; the
-      // cached anchor keeps the horizontal position rock-steady.
-      if (await windowManager.isVisible()) await _position();
-    }
+    if (!_ready) return;
+    final card = height.ceilToDouble();
+    if ((card - _cardHeight).abs() < 1) return;
+    _cardHeight = card;
+    // Grow-only: keep the surface from ever shrinking-then-growing on the hot
+    // path. A grow is a one-time, off-screen-at-launch cost; afterwards the
+    // window stays put and only the card mask changes.
+    final grew = card > _windowHeight;
+    if (grew) _windowHeight = card;
+    await _panelChannel.invokeMethod('resize', {
+      'width': width,
+      'windowHeight': _windowHeight,
+      'cardHeight': card,
+    });
+    // Only a height change needs a re-pin; a mask-only update leaves the window
+    // frame untouched, so the cached anchor still holds.
+    if (grew && await windowManager.isVisible()) await _position();
   }
 
   /// When the click on the status item makes the panel resign key first, the

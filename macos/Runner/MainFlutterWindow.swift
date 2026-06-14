@@ -32,6 +32,14 @@ final class PopoverBlurView: NSVisualEffectView {
     didSet { rebuildMask() }
   }
 
+  /// Height of the visible card (Flutter's measured content), pushed from Dart.
+  /// The window is a fixed, taller-than-content height that never shrinks, so
+  /// the card is masked at the TOP at this height; ≤ 0 means "fill the window"
+  /// (the legacy behaviour, before the first push).
+  var cardHeight: CGFloat = 0 {
+    didSet { rebuildMask() }
+  }
+
   override init(frame: NSRect) {
     super.init(frame: frame)
     // .fullScreenUI is the most see-through of the appearance-adaptive
@@ -55,22 +63,27 @@ final class PopoverBlurView: NSVisualEffectView {
     guard bounds.width > 0, bounds.height > 0 else { return }
     let size = bounds.size
     let arrowFromRight = self.arrowFromRight
+    // The card is masked at the top at its measured height; before Dart pushes
+    // one (or for a full-height window) it fills the view.
+    let card = cardHeight > 0 ? min(cardHeight, size.height) : size.height
     let image = NSImage(size: size, flipped: false) { _ in
       NSColor.black.setFill()
-      Self.bubblePath(in: size, arrowFromRight: arrowFromRight).fill()
+      Self.bubblePath(in: size, cardHeight: card, arrowFromRight: arrowFromRight).fill()
       return true
     }
     maskImage = image
   }
 
   /// The card-plus-arrow outline in AppKit (bottom-left origin) coordinates;
-  /// must trace the same shape as _BubblePainter._bubblePath in Dart.
-  static func bubblePath(in size: NSSize, arrowFromRight: CGFloat) -> NSBezierPath {
+  /// must trace the same shape as _BubblePainter._bubblePath in Dart. The card
+  /// is pinned to the TOP of the view (the arrow tip touches the view's top
+  /// edge) and spans [cardHeight]; any extra view height below stays clear.
+  static func bubblePath(in size: NSSize, cardHeight: CGFloat, arrowFromRight: CGFloat) -> NSBezierPath {
     let card = NSRect(
       x: gutterSide,
-      y: gutterBottom,
+      y: size.height - cardHeight + gutterBottom,
       width: size.width - 2 * gutterSide,
-      height: size.height - gutterBottom - arrowHeight)
+      height: cardHeight - gutterBottom - arrowHeight)
     let path = NSBezierPath(roundedRect: card, xRadius: cornerRadius, yRadius: cornerRadius)
 
     let cx = size.width - arrowFromRight
@@ -236,6 +249,29 @@ enum PopoverChannel {
         if let window {
           backdrop.hide(from: window)
           window.orderOut(nil)
+        }
+        result(true)
+      // Updates the popover's layout. The window height is a fixed, grow-only
+      // value (it never shrinks), so this almost never resizes the window —
+      // which is the whole point: growing an NSWindow that hosts a FlutterView
+      // blocks the main thread up to ~1s waiting on a Metal drawable. Switching
+      // views only changes `cardHeight`, which re-masks the blur to hug the
+      // card at the top while the window (and its render surface) stay put.
+      case "resize":
+        if let window, let args = call.arguments as? [String: Any] {
+          if let w = args["width"] as? Double,
+             let wh = args["windowHeight"] as? Double {
+            let target = NSSize(width: CGFloat(w), height: CGFloat(wh))
+            if window.frame.size != target {
+              var f = window.frame
+              f.origin.y += f.size.height - CGFloat(wh) // keep the top pinned
+              f.size = target
+              window.setFrame(f, display: true)
+            }
+          }
+          if let ch = args["cardHeight"] as? Double {
+            backdrop.blurView.cardHeight = CGFloat(ch)
+          }
         }
         result(true)
       // Keeps the blur mask's arrow under the status item; the Dart
