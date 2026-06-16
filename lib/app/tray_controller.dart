@@ -173,8 +173,12 @@ class TrayController with TrayListener {
     if (snapshot != null) {
       final window = metric == MenuBarMetric.weekly ? snapshot.weekly : snapshot.session;
       // The % lives in the ring, so the title carries just the countdown
-      // (variant G), falling back to the % when there's no reset time yet.
-      return Fmt.countdownShort(window.resetsAt) ?? Fmt.pct(window.percent);
+      // (variant G). A fresh window has no reset clock yet (it starts on the
+      // first request), so show "Ready" instead of a bare "0%"; fall back to
+      // the % for the odd case of usage without a parsed reset time.
+      final countdown = Fmt.countdownShort(window.resetsAt);
+      if (countdown != null) return countdown;
+      return window.percent == 0 ? 'Ready' : Fmt.pct(window.percent);
     }
     if (state.error != null) return state.error!.menuBarLabel;
     return '--%';
