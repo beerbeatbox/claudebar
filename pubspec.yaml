@@ -2,7 +2,7 @@ name: claude_usage_bar
 description: "ClaudeBar — a macOS menu-bar app that shows your Claude usage as a live percentage."
 publish_to: "none"
 
-version: 1.5.0+9
+version: 1.5.1+10
 
 environment:
   sdk: ^3.7.0
