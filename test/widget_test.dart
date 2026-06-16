@@ -45,7 +45,7 @@ void main() {
       expect(Fmt.countdownShort(null), isNull);
       expect(
         Fmt.countdownShort(now.subtract(const Duration(minutes: 1)), now: now),
-        'soon',
+        '0m',
       );
     });
   });

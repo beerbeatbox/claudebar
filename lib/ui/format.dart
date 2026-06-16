@@ -9,7 +9,7 @@ class Fmt {
     final current = now ?? DateTime.now();
     final diff = resetsAt.difference(current);
 
-    if (diff.isNegative) return 'Resets soon';
+    if (diff.isNegative) return 'Resets 0m';
 
     if (diff.inHours < 24) {
       final h = diff.inHours;
@@ -22,13 +22,13 @@ class Fmt {
   }
 
   /// Compact countdown for the menu-bar title — "2h05m", "45m", or "3d4h"
-  /// for far-off (weekly) resets. Null when there's no reset time; "soon"
-  /// once the reset moment has passed but a fresh snapshot hasn't landed.
+  /// for far-off (weekly) resets. Null when there's no reset time; bottoms out
+  /// at "0m" once the reset moment has passed but a fresh snapshot hasn't landed.
   static String? countdownShort(DateTime? resetsAt, {DateTime? now}) {
     if (resetsAt == null) return null;
     final diff = resetsAt.difference(now ?? DateTime.now());
 
-    if (diff.isNegative) return 'soon';
+    if (diff.isNegative) return '0m';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m';
     if (diff.inHours < 24) {
       return '${diff.inHours}h${(diff.inMinutes % 60).toString().padLeft(2, '0')}m';
