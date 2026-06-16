@@ -39,33 +39,39 @@ class ClaudeTokens {
     required this.red,
   });
 
-  // cardBg is fully transparent: the card surface IS the native
-  // NSVisualEffectView glass behind the window — any fill here only
-  // muddies it.
+  // Both palettes use a near-opaque card fill (~93%). A fully transparent fill
+  // let the native NSVisualEffectView take on whatever sat behind the window —
+  // a dark desktop crushed the light card to mid-grey, a bright one washed the
+  // dark card out — wrecking text contrast either way. A firm surface keeps the
+  // card legible on ANY background; secondary/tertiary inks and hairlines are
+  // also strengthened to clear WCAG AA.
   static const ClaudeTokens dark = ClaudeTokens(
-    cardBg: Color(0x001E1E23),
-    cardBorder: Color(0x1FFFFFFF),
+    cardBg: Color(0xED1E1E23),
+    cardBorder: Color(0x33FFFFFF),
     text1: Color(0xF2FFFFFF),
-    text2: Color(0x8FFFFFFF),
-    text3: Color(0x57FFFFFF),
-    track: Color(0x24FFFFFF),
-    hairline: Color(0x1AFFFFFF),
+    text2: Color(0xA6FFFFFF),
+    text3: Color(0x8CFFFFFF),
+    track: Color(0x33FFFFFF),
+    hairline: Color(0x2EFFFFFF),
     accent: Color(0xFFE68A5C),
     amber: Color(0xFFF0B43C),
     red: Color(0xFFF2645F),
   );
 
+  // Near-opaque (~93%) for the same reason as dark (see above): a firm light
+  // surface keeps black ink readable on any background, instead of letting a
+  // dark desktop pull the card down to a muddy mid-grey.
   static const ClaudeTokens light = ClaudeTokens(
-    cardBg: Color(0x00F7F7F9),
-    cardBorder: Color(0x14000000),
-    text1: Color(0xE0000000),
-    text2: Color(0x80000000),
-    text3: Color(0x57000000),
-    track: Color(0x1A000000),
-    hairline: Color(0x14000000),
-    accent: Color(0xFFC45B36),
-    amber: Color(0xFFB6790E),
-    red: Color(0xFFCE3A40),
+    cardBg: Color(0xEDF7F7F9),
+    cardBorder: Color(0x26000000),
+    text1: Color(0xF2000000),
+    text2: Color(0xA6000000),
+    text3: Color(0x8C000000),
+    track: Color(0x2E000000),
+    hairline: Color(0x24000000),
+    accent: Color(0xFFB84E2A),
+    amber: Color(0xFF9C6A0C),
+    red: Color(0xFFC42A30),
   );
 
   static ClaudeTokens of(BuildContext context) {
