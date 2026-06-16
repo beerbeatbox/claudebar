@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/usage_forecast.dart';
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
 import '../state/usage_controller.dart';
@@ -40,7 +39,6 @@ class _PopoverState extends ConsumerState<Popover> {
   Widget build(BuildContext context) {
     final t = ClaudeTokens.of(context);
     final state = ref.watch(usageControllerProvider);
-    final forecast = ref.watch(forecastProvider);
 
     // No fill colour here on purpose: the side/bottom gutter must stay
     // hit-transparent so a tap there falls through to the dismiss layer behind
@@ -81,7 +79,6 @@ class _PopoverState extends ConsumerState<Popover> {
                     )
                     : _UsageView(
                       state: state,
-                      forecast: forecast,
                       onSettings: () => setState(() => _showSettings = true),
                     ),
           ),
@@ -93,12 +90,10 @@ class _PopoverState extends ConsumerState<Popover> {
 
 class _UsageView extends StatelessWidget {
   final UsageState state;
-  final Forecast? forecast;
   final VoidCallback onSettings;
 
   const _UsageView({
     required this.state,
-    required this.forecast,
     required this.onSettings,
   });
 
@@ -146,12 +141,6 @@ class _UsageView extends StatelessWidget {
             stale: snapshot.stale,
             fetchedAt: snapshot.fetchedAt,
           ),
-          if (!snapshot.stale)
-            _ForecastLine(
-              forecast: forecast,
-              resetsAt: snapshot.session.resetsAt,
-              t: t,
-            ),
           const SizedBox(height: 16),
           MeterRow(
             window: snapshot.weekly,
@@ -190,70 +179,6 @@ class _UsageView extends StatelessWidget {
     if (snapshot != null) return Fmt.updated(snapshot.fetchedAt);
     if (error != null) return 'Not synced';
     return '';
-  }
-}
-
-/// The burn-rate line under the session meter. Always visible (when online) so
-/// the feature never silently disappears — it just changes message:
-///   • no/too-little history → "Burn rate · gathering data…"
-///   • online but flat/idle  → "Burn rate · steady"
-///   • climbing              → "🔥 ≈14%/hr · full by 15:20"
-/// The ETA is dropped when the window won't fill before it resets — the rate
-/// alone still tells the story.
-class _ForecastLine extends StatelessWidget {
-  final Forecast? forecast;
-  final DateTime? resetsAt;
-  final ClaudeTokens t;
-
-  const _ForecastLine({
-    required this.forecast,
-    required this.resetsAt,
-    required this.t,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final f = forecast;
-
-    final TextStyle base = TextStyle(
-      fontSize: 11,
-      color: t.text2,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-
-    Widget line(List<InlineSpan> spans, {TextStyle? style}) => Padding(
-      padding: const EdgeInsets.only(top: 7),
-      child: Text.rich(TextSpan(children: spans), style: style ?? base),
-    );
-
-    // Not enough history yet to project from.
-    if (f == null) {
-      return line(
-        const [TextSpan(text: '⏳ Burn rate · gathering data…')],
-        style: base.copyWith(color: t.text3),
-      );
-    }
-
-    // Online and idle — usage isn't climbing.
-    if (!f.usable) {
-      return line(const [TextSpan(text: '🔥 Burn rate · steady')]);
-    }
-
-    final full = f.full;
-    final showEta =
-        full != null && (resetsAt == null || full.isBefore(resetsAt!));
-
-    return line([
-      const TextSpan(text: '🔥 '),
-      TextSpan(text: Fmt.ratePerHour(f.ratePerHour)),
-      if (showEta) ...[
-        TextSpan(text: ' · ', style: TextStyle(color: t.text3)),
-        TextSpan(
-          text: Fmt.fullBy(full),
-          style: TextStyle(color: t.amber, fontWeight: FontWeight.w600),
-        ),
-      ],
-    ]);
   }
 }
 

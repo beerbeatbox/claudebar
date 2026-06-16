@@ -4,9 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/cli_usage_source.dart';
-import '../data/usage_forecast.dart';
-import '../data/usage_history.dart';
-import '../data/usage_notifier.dart';
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
 import '../models/usage_window.dart';
@@ -152,28 +149,9 @@ class UsageController extends Notifier<UsageState> {
     // fallback, which would mask which one happened.
     final result = await ref.read(cliUsageSourceProvider).fetch();
     if (result.isOk) {
-      final previous = state.snapshot;
       final fresh = result.snapshot!;
-      // History + forecast are best-effort. They run before publishing so
-      // forecastProvider (which recomputes off the new state) sees this reading
-      // — but a storage hiccup must never block the state update or, critically,
-      // the cooldown lock that protects the rate-limited endpoint.
-      Forecast? forecast;
-      try {
-        final history = ref.read(usageHistoryProvider);
-        await history.add(fresh);
-        forecast = Forecast.compute(fresh, history.samples);
-      } catch (_) {}
       state = UsageState(snapshot: fresh, loading: false);
       _lock(_cooldown);
-      // Notifications are likewise best-effort.
-      try {
-        await ref.read(usageNotifierProvider).evaluate(
-              prev: previous,
-              next: fresh,
-              forecast: forecast,
-            );
-      } catch (_) {}
     } else {
       // Keep-last-known (spec §11). For a noData failure — the CLI answered but
       // its fetch was gated — the last reading is still the latest available, so
@@ -253,12 +231,3 @@ class UsageController extends Notifier<UsageState> {
 final usageControllerProvider = NotifierProvider<UsageController, UsageState>(
   UsageController.new,
 );
-
-/// The burn-rate projection for the current (live) snapshot, recomputed
-/// whenever usage state changes. Null when offline, or when there isn't enough
-/// history yet to project from.
-final forecastProvider = Provider<Forecast?>((ref) {
-  final snapshot = ref.watch(usageControllerProvider).snapshot;
-  if (snapshot == null || snapshot.stale) return null;
-  return Forecast.compute(snapshot, ref.read(usageHistoryProvider).samples);
-});

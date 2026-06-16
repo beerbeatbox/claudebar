@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +10,6 @@ import 'package:window_manager/window_manager.dart';
 import 'app/measure_size.dart';
 import 'app/popover_window.dart';
 import 'app/tray_controller.dart';
-import 'data/usage_notifier.dart';
 import 'settings/prefs.dart';
 import 'state/usage_controller.dart';
 import 'ui/popover_panel.dart';
@@ -31,22 +29,9 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Local notifications: initialize once and request permission up front so the
-  // first 90%/reset event can actually surface. macOS shows the system prompt
-  // on first launch only.
-  final notifications = FlutterLocalNotificationsPlugin();
-  await notifications.initialize(
-    settings: const InitializationSettings(macOS: DarwinInitializationSettings()),
-  );
-  await notifications
-      .resolvePlatformSpecificImplementation<
-          MacOSFlutterLocalNotificationsPlugin>()
-      ?.requestPermissions(alert: true, badge: true, sound: true);
-
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
-      notificationsPluginProvider.overrideWithValue(notifications),
     ],
   );
 

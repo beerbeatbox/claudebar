@@ -66,29 +66,6 @@ class SettingsPanel extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 18),
-
-        _Label('Notify me', t),
-        const SizedBox(height: 2),
-        _ToggleRow(
-          title: 'Near limit (90%)',
-          value: settings.notifyCritical,
-          onChanged: controller.setNotifyCritical,
-          t: t,
-        ),
-        _ToggleRow(
-          title: 'Filling fast',
-          value: settings.notifyUrgent,
-          onChanged: controller.setNotifyUrgent,
-          t: t,
-        ),
-        _ToggleRow(
-          title: 'Quota reset',
-          value: settings.notifyReset,
-          onChanged: controller.setNotifyReset,
-          t: t,
-        ),
-
         const SizedBox(height: 8),
         Divider(color: t.hairline, height: 24, thickness: 0.5),
         Align(
@@ -122,38 +99,6 @@ class _Label extends StatelessWidget {
         letterSpacing: 0.6,
         color: t.text2,
       ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  final String title;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final ClaudeTokens t;
-
-  const _ToggleRow({
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    required this.t,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: TextStyle(fontSize: 12, color: t.text1)),
-        Transform.scale(
-          scale: 0.8,
-          child: Switch.adaptive(
-            value: value,
-            activeTrackColor: t.accent,
-            onChanged: onChanged,
-          ),
-        ),
-      ],
     );
   }
 }
