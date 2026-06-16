@@ -30,10 +30,26 @@ class TrayController with TrayListener {
   /// runtime-rendered glyph (base64) instead of a bundled asset.
   static const MethodChannel _trayChannel = MethodChannel('tray_manager');
 
+  /// Native pushes 'screenParametersChanged' here when the display topology
+  /// changes (external monitor connect/disconnect, dock/undock, sleep/wake).
+  /// macOS 26 routinely detaches menu-bar items on those events and leaves them
+  /// invisible until the status item is recreated — see the sibling app
+  /// CodexBar's issues #1077/#1088 for the same failure mode.
+  static const MethodChannel _recoveryChannel = MethodChannel('claudebar/tray');
+
   Timer? _countdownTimer;
+
+  /// Coalesces a burst of display-change events into a single recovery, once
+  /// the topology has settled.
+  Timer? _recoverDebounce;
+
+  /// Guards against overlapping recoveries (a display burst and the periodic
+  /// self-heal could otherwise run at once).
+  bool _recovering = false;
 
   Future<void> init() async {
     trayManager.addListener(this);
+    _recoveryChannel.setMethodCallHandler(_onRecoveryCall);
     await _rebuild();
 
     // Re-render whenever usage or the chosen metric changes.
@@ -41,8 +57,9 @@ class TrayController with TrayListener {
     container.listen(settingsProvider, (_, __) => _rebuild(), fireImmediately: false);
 
     // The title carries a minute-granular reset countdown, so tick it along
-    // between refreshes (design mockup variant G: ring + "2h14m").
-    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _rebuild());
+    // between refreshes (design mockup variant G: ring + "2h14m"). The tick
+    // also self-heals the status item if macOS has silently dropped it.
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _tick());
   }
 
   Future<void> _rebuild() async {
@@ -51,6 +68,74 @@ class TrayController with TrayListener {
     await _updateGlyph(state, settings.metric);
     await trayManager.setTitle(_title(state, settings.metric));
     await trayManager.setContextMenu(_menu(state));
+  }
+
+  /// Minute tick: keep the status item alive, then refresh its countdown. If
+  /// macOS has silently dropped the item (a Control Center eviction when the
+  /// menu bar is full, with no display event to catch), recreate it instead.
+  Future<void> _tick() async {
+    if (!_recovering && await _trayMissing()) {
+      await _recover('self-heal');
+    } else {
+      await _rebuild();
+    }
+  }
+
+  Future<dynamic> _onRecoveryCall(MethodCall call) async {
+    if (call.method == 'screenParametersChanged') {
+      // The topology is usually mid-flux for a moment after the first event;
+      // wait for it to settle, coalescing the burst into one recovery.
+      _recoverDebounce?.cancel();
+      _recoverDebounce = Timer(
+        const Duration(milliseconds: 800),
+        () => _recover('display change'),
+      );
+    }
+    return null;
+  }
+
+  /// Rebuilds the status item from scratch. Re-pushing the icon is not enough
+  /// once macOS has detached the item from a screen, so tear it down and
+  /// recreate it (setIcon re-creates the NSStatusItem), then verify it actually
+  /// landed — macOS can still leave it detached, so retry a few times with
+  /// backoff (mirrors CodexBar v0.28.0's settle-and-retry recovery).
+  Future<void> _recover(String reason) async {
+    if (_recovering) return;
+    _recovering = true;
+    try {
+      for (var attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) {
+          await Future.delayed(Duration(milliseconds: 500 * attempt));
+        }
+        try {
+          await trayManager.destroy();
+          await _rebuild();
+        } catch (e) {
+          debugPrint('[ClaudeBar] tray recovery ($reason) attempt $attempt: $e');
+          continue;
+        }
+        if (!await _trayMissing()) {
+          if (attempt > 0) {
+            debugPrint('[ClaudeBar] tray recovered ($reason) on attempt $attempt');
+          }
+          return;
+        }
+      }
+      debugPrint('[ClaudeBar] tray still missing after recovery ($reason)');
+    } finally {
+      _recovering = false;
+    }
+  }
+
+  /// True when the status item has no on-screen presence — no bounds, or a
+  /// collapsed (~zero) width — which is how a detached/evicted item reports.
+  Future<bool> _trayMissing() async {
+    try {
+      final bounds = await trayManager.getBounds();
+      return bounds == null || bounds.width <= 1;
+    } catch (_) {
+      return true;
+    }
   }
 
   /// Draws the ring gauge for the selected window and installs it as the
@@ -158,6 +243,7 @@ class TrayController with TrayListener {
 
   Future<void> _quit() async {
     _countdownTimer?.cancel();
+    _recoverDebounce?.cancel();
     await trayManager.destroy();
     exit(0);
   }

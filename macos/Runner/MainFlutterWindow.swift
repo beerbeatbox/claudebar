@@ -212,6 +212,12 @@ class MainFlutterWindow: NSPanel {
       backdrop: backdrop
     )
 
+    // Tell Dart when the display topology changes so the tray can re-assert its
+    // status item (macOS 26 detaches menu-bar items on display reconfig).
+    TrayRecoveryChannel.register(
+      with: flutterViewController.registrar(forPlugin: "TrayRecoveryChannel")
+    )
+
     super.awakeFromNib()
   }
 }
@@ -284,6 +290,35 @@ enum PopoverChannel {
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+  }
+}
+
+/// Notifies Dart of display-topology changes so the tray controller can
+/// recreate its NSStatusItem. macOS 26 frequently detaches menu-bar items when
+/// displays are connected/disconnected, docked/undocked, or sleep/wake, leaving
+/// the icon invisible until the item is recreated (the sibling app CodexBar hit
+/// the same thing — issues #1077/#1088). didChangeScreenParametersNotification
+/// is the high-level signal that covers all of those.
+enum TrayRecoveryChannel {
+  static let channelName = "claudebar/tray"
+  private static var channel: FlutterMethodChannel?
+  private static var observer: NSObjectProtocol?
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: registrar.messenger
+    )
+    self.channel = channel
+    // A topology change fires a burst of these; Dart debounces, so just
+    // forward each one as it arrives.
+    observer = NotificationCenter.default.addObserver(
+      forName: NSApplication.didChangeScreenParametersNotification,
+      object: nil,
+      queue: .main
+    ) { _ in
+      channel.invokeMethod("screenParametersChanged", arguments: nil)
     }
   }
 }
