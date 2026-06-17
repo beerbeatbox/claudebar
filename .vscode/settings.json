@@ -1,0 +1,13 @@
+{
+  // Use the fvm-pinned Flutter/Dart SDK (3.41.6) so the IDE analyzer matches
+  // what the CLI (`fvm flutter ...`) and `rps` scripts use. Without this, VS
+  // Code may use a global Flutter SDK and miss freshly `pub get`-ed packages
+  // (e.g. an unresolved-import "red" on a brand-new dependency).
+  "dart.flutterSdkPath": ".fvm/flutter_sdk",
+  "search.exclude": {
+    "**/.fvm": true
+  },
+  "files.watcherExclude": {
+    "**/.fvm": true
+  }
+}
