@@ -165,8 +165,18 @@ class MainFlutterWindow: NSPanel {
   }
 
   // The popover must take key status when ordered front so clicks/keys land in
-  // Flutter and window_manager's resign-key → blur → auto-hide keeps working.
-  override var canBecomeKey: Bool { true }
+  // Flutter and window_manager's resign-key → blur → auto-hide keeps working —
+  // but ONLY then. At launch the nib orders this (transparent) window front so
+  // the Flutter engine has a surface to render its first frame on, which is
+  // what runs the Dart entrypoint that registers the menu-bar status item. If
+  // the window can become key during that launch pass it captures system-wide
+  // keyboard input for this windowless LSUIElement agent app: keystrokes go
+  // nowhere and the text caret flickers in every app until ClaudeBar quits.
+  // Gate key eligibility on the popover actually being presented — Popover
+  // channel flips this true right before makeKeyAndOrderFront and false again
+  // after orderOut — so launch can render (tray appears) without stealing focus.
+  var popoverWantsKey = false
+  override var canBecomeKey: Bool { popoverWantsKey }
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -247,6 +257,10 @@ enum PopoverChannel {
       switch call.method {
       case "show":
         if let window {
+          // Allow key status only now that the user is opening the popover, so
+          // typing lands in Flutter. At launch canBecomeKey stays false so the
+          // window can render (registering the tray) without grabbing focus.
+          (window as? MainFlutterWindow)?.popoverWantsKey = true
           window.makeKeyAndOrderFront(nil)
           backdrop.show(under: window)
         }
@@ -255,6 +269,9 @@ enum PopoverChannel {
         if let window {
           backdrop.hide(from: window)
           window.orderOut(nil)
+          // Hand key back to the user's app and bar the hidden popover from
+          // becoming key again until it is next presented.
+          (window as? MainFlutterWindow)?.popoverWantsKey = false
         }
         result(true)
       // Updates the popover's layout. The window height is a fixed, grow-only
