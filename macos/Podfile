@@ -29,6 +29,11 @@ flutter_macos_podfile_setup
 target 'Runner' do
   use_frameworks!
 
+  # auto_updater bundles Sparkle but does not pin a version. Pin it here so
+  # release builds are reproducible. If you ever bump the MAJOR version, re-check
+  # the nested-helper paths in scripts/release_dmg.sh (Versions/*/Autoupdate etc).
+  pod 'Sparkle', '~> 2.5'
+
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths

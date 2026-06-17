@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -208,6 +209,7 @@ class TrayController with TrayListener {
     items.add(MenuItem.separator());
     items.add(MenuItem(key: 'open', label: 'Open ClaudeBar'));
     items.add(MenuItem(key: 'refresh', label: 'Refresh'));
+    items.add(MenuItem(key: 'check-updates', label: 'Check for Updates…'));
     items.add(MenuItem.separator());
     items.add(MenuItem(key: 'quit', label: 'Quit ClaudeBar'));
 
@@ -238,6 +240,12 @@ class TrayController with TrayListener {
         break;
       case 'refresh':
         container.read(usageControllerProvider.notifier).refresh();
+        break;
+      case 'check-updates':
+        // User-initiated: Sparkle activates the app so its dialog surfaces even
+        // though ClaudeBar is an LSUIElement (menu-bar) app. setFeedURL was set
+        // once in main(); calling checkForUpdates() before that would no-op.
+        autoUpdater.checkForUpdates();
         break;
       case 'quit':
         _quit();

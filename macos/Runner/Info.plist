@@ -30,5 +30,11 @@
 	<string>NSApplication</string>
 	<key>LSUIElement</key>
 	<true/>
+	<!-- Sparkle EdDSA public key. The matching PRIVATE key lives in the login
+	     Keychain (search "sparkle"); back it up — it cannot be regenerated.
+	     See the release skill for the export/import runbook. The feed URL is set
+	     at runtime via autoUpdater.setFeedURL() in lib/main.dart (no SUFeedURL). -->
+	<key>SUPublicEDKey</key>
+	<string>OQCMVAs9l5UXNdwz3Fd2GBxig2oZn81BCdpZWt2/3Mo=</string>
 </dict>
 </plist>

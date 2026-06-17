@@ -22,6 +22,9 @@ dependencies:
   screen_retriever: ^0.2.0
   launch_at_startup: ^0.5.1
 
+  # In-app auto-update (wraps Sparkle 2.x on macOS)
+  auto_updater: ^1.0.0
+
   # Persistence, formatting
   shared_preferences: ^2.3.2
   intl: ^0.20.2
