@@ -31,11 +31,12 @@ class TrayController with TrayListener {
   /// runtime-rendered glyph (base64) instead of a bundled asset.
   static const MethodChannel _trayChannel = MethodChannel('tray_manager');
 
-  /// Native pushes 'screenParametersChanged' here when the display topology
-  /// changes (external monitor connect/disconnect, dock/undock, sleep/wake).
-  /// macOS 26 routinely detaches menu-bar items on those events and leaves them
-  /// invisible until the status item is recreated — see the sibling app
-  /// CodexBar's issues #1077/#1088 for the same failure mode.
+  /// Native pushes 'recover' here when macOS is liable to have dropped the
+  /// status item: a display-topology change (external monitor connect/disconnect,
+  /// dock/undock, resolution change) OR sleep/wake. macOS 26 routinely detaches
+  /// menu-bar items on those events and leaves them invisible until the status
+  /// item is recreated — see the sibling app CodexBar's issues #1077/#1088 for
+  /// the same failure mode.
   static const MethodChannel _recoveryChannel = MethodChannel('claudebar/tray');
 
   Timer? _countdownTimer;
@@ -83,13 +84,17 @@ class TrayController with TrayListener {
   }
 
   Future<dynamic> _onRecoveryCall(MethodCall call) async {
-    if (call.method == 'screenParametersChanged') {
-      // The topology is usually mid-flux for a moment after the first event;
-      // wait for it to settle, coalescing the burst into one recovery.
+    if (call.method == 'recover') {
+      // The system is usually mid-flux for a moment after the first event (the
+      // topology settling, or the menu bar rebuilding after wake); wait for it
+      // to settle, coalescing the burst into one recovery. We recover
+      // unconditionally rather than checking _trayMissing first: when macOS
+      // force-hides the item it keeps the bounds valid (isVisible stays true),
+      // so the only reliable cure is to recreate it on every such event.
       _recoverDebounce?.cancel();
       _recoverDebounce = Timer(
         const Duration(milliseconds: 800),
-        () => _recover('display change'),
+        () => _recover('display/wake'),
       );
     }
     return null;
