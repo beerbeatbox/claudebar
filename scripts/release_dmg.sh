@@ -61,7 +61,14 @@ build_sparkle_zip() {
   echo "Created $ZIP_PATH"
   if [[ -x "$SIGN_UPDATE" ]]; then
     echo "==> Appcast signature for v${VERSION} (paste into docs/appcast.xml <enclosure>):"
-    "$SIGN_UPDATE" "$ZIP_PATH"
+    # CI has no EdDSA key in the Keychain (and a Keychain ACL prompt would hang a
+    # headless runner), so point sign_update at a key file when SPARKLE_KEY_FILE
+    # is set; locally it stays unset and the key is read from the Keychain.
+    if [[ -n "${SPARKLE_KEY_FILE:-}" ]]; then
+      "$SIGN_UPDATE" "$ZIP_PATH" -f "$SPARKLE_KEY_FILE"
+    else
+      "$SIGN_UPDATE" "$ZIP_PATH"
+    fi
   else
     echo "note: $SIGN_UPDATE not found. Run 'pod install' (macos/), then:" >&2
     echo "      dart run auto_updater:sign_update \"$ZIP_PATH\"" >&2
