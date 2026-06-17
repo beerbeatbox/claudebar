@@ -64,6 +64,11 @@ jobs:
       - name: flutter pub get
         run: fvm flutter pub get
 
+      # The Podfile post-install hook reads FlutterMacOS.xcframework from the
+      # engine cache; without precache it isn't there yet and pod install aborts.
+      - name: flutter precache (macOS engine artifacts)
+        run: fvm flutter precache --macos
+
       - name: pod install (provides Sparkle's sign_update)
         run: cd macos && pod install
 
