@@ -42,5 +42,23 @@
     <link>https://beerbeatbox.github.io/claudebar/appcast.xml</link>
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
+    <item>
+      <title>Version 1.5.2</title>
+      <sparkle:version>11</sparkle:version>
+      <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>ClaudeBar can now update itself — a new "Check for Updates…" item in the menu, plus automatic daily background checks.</li>
+        </ul>
+      ]]></description>
+      <pubDate>Wed, 17 Jun 2026 01:10:09 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.2/ClaudeBar-1.5.2.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="lJ3Uc8F6OJoUpQxRQJTCBxGGNVffMHhXHgXEWH74XSZGNpbZzBBA9hPVceuq2QGzDEecVYDWlK655YqH7QjaCA=="
+        length="17511637"
+        type="application/octet-stream" />
+    </item>
   </channel>
 </rss>
