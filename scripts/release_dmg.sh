@@ -25,7 +25,10 @@ ENTITLEMENTS="macos/Runner/Release.entitlements"
 NOTARY_PROFILE="claudebar-notary"
 VERSION="$(sed -n 's/^version: \([0-9.]*\).*/\1/p' pubspec.yaml)"
 DMG_PATH="build/dist/${APP_NAME}-${VERSION}.dmg"
+ZIP_PATH="build/dist/${APP_NAME}-${VERSION}.zip"
 ID_FILE="build/dist/.notary-submission-id"
+# Sign tool ships inside the Sparkle pod once `pod install` has run.
+SIGN_UPDATE="macos/Pods/Sparkle/bin/sign_update"
 
 submission_status() {
   xcrun notarytool info "$1" --keychain-profile "$NOTARY_PROFILE" 2>/dev/null \
@@ -38,8 +41,31 @@ staple_and_verify() {
   echo "==> Verifying Gatekeeper acceptance"
   spctl --assess --type open --context context:primary-signature -v "$DMG_PATH"
   rm -f "$ID_FILE"
+  build_sparkle_zip
   echo
   echo "Done: $DMG_PATH — ready to share."
+}
+
+# Build the Sparkle update enclosure: a ditto-zip of the .app (NOT the DMG —
+# DMG packaging can strip the exec bit off Sparkle helpers and break installs;
+# ditto preserves the framework symlinks + code signatures). Staple the .app so
+# it verifies offline too (its cdhash was notarized as part of the DMG submit),
+# then print the appcast signature for the human to paste into docs/appcast.xml.
+build_sparkle_zip() {
+  echo "==> Stapling the .app for the Sparkle update zip"
+  xcrun stapler staple "$APP_PATH" \
+    || echo "warn: could not staple .app — the zip still verifies online."
+  echo "==> Building Sparkle update zip"
+  rm -f "$ZIP_PATH"
+  ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+  echo "Created $ZIP_PATH"
+  if [[ -x "$SIGN_UPDATE" ]]; then
+    echo "==> Appcast signature for v${VERSION} (paste into docs/appcast.xml <enclosure>):"
+    "$SIGN_UPDATE" "$ZIP_PATH"
+  else
+    echo "note: $SIGN_UPDATE not found. Run 'pod install' (macos/), then:" >&2
+    echo "      dart run auto_updater:sign_update \"$ZIP_PATH\"" >&2
+  fi
 }
 
 finish_submission() {
@@ -86,6 +112,27 @@ echo "Signing identity: $IDENTITY"
 echo "==> Building release app"
 fvm flutter build macos --release
 
+echo "==> Signing Sparkle helpers (inside-out, hardened runtime)"
+# Sparkle.framework embeds nested executables (Autoupdate, the Updater app, and
+# on sandboxed apps XPC services) that Apple's notary service inspects on their
+# own. The depth-1 loop below only signs the framework *wrapper*, so these must
+# be signed first — otherwise notarization fails with "the executable does not
+# have the hardened runtime enabled". Do NOT use `codesign --deep` for this;
+# Sparkle's docs forbid it (it clobbers each component's own requirements).
+SPARKLE="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+if [[ -d "$SPARKLE" ]]; then
+  sparkle_sign() { codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1"; }
+  # XPC services only exist for sandboxed apps (ClaudeBar is not), but sign them
+  # if a future Sparkle build ships them. Glob over Versions/* to stay robust.
+  for xpc in "$SPARKLE"/Versions/*/XPCServices/*.xpc; do
+    [[ -e "$xpc" ]] && sparkle_sign "$xpc"
+  done
+  for helper in "$SPARKLE"/Versions/*/Autoupdate "$SPARKLE"/Versions/*/Updater.app; do
+    [[ -e "$helper" ]] && sparkle_sign "$helper"
+  done
+  sparkle_sign "$SPARKLE"   # wrapper LAST so its seal covers the helpers above
+fi
+
 echo "==> Signing nested frameworks and dylibs"
 while IFS= read -r -d '' item; do
   codesign --force --options runtime --timestamp --sign "$IDENTITY" "$item"
@@ -95,7 +142,9 @@ done < <(find "$APP_PATH/Contents/Frameworks" -depth 1 \
 echo "==> Signing app bundle"
 codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS" --sign "$IDENTITY" "$APP_PATH"
-codesign --verify --deep --strict "$APP_PATH"
+# Not --deep: deep-verify is tolerated but deep-sign (above) is the real hazard;
+# a non-deep strict verify surfaces per-component problems honestly.
+codesign --verify --strict --verbose=2 "$APP_PATH"
 
 echo "==> Packaging DMG"
 scripts/make_dmg.sh

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ClaudeBar Sparkle appcast.
+
+  Served via GitHub Pages at:
+    https://beerbeatbox.github.io/claudebar/appcast.xml
+  One-time setup: GitHub repo Settings > Pages > Build and deployment >
+  Source "Deploy from a branch" > Branch "main" / folder "/docs".
+
+  PER RELEASE: prepend a fresh <item> inside <channel> (newest first). Get the
+  edSignature + length from `rps ship` output (it runs sign_update on the zip),
+  or run: dart run auto_updater:sign_update build/dist/ClaudeBar-X.Y.Z.zip
+
+  Item template (copy, fill in, place directly below <language>):
+
+    <item>
+      <title>Version X.Y.Z</title>
+      <sparkle:version>N</sparkle:version>
+      <sparkle:shortVersionString>X.Y.Z</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>What changed.</li></ul> ]]></description>
+      <pubDate>Day, DD Mon YYYY HH:MM:SS +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/vX.Y.Z/ClaudeBar-X.Y.Z.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="PASTE_FROM_sign_update"
+        length="PASTE_FROM_sign_update"
+        type="application/octet-stream" />
+    </item>
+
+  Notes:
+    * sparkle:version is CFBundleVersion = the pubspec build number (the +N).
+      It is what Sparkle compares to decide "is there a newer build"; it MUST
+      strictly increase every release. shortVersionString is display-only.
+    * sparkle:minimumSystemVersion must be three-part (10.15.0, not 10.15).
+    * length is bytes; sign_update computes it, do not hand-edit.
+    * The enclosure points at the .zip release asset, not the .dmg.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>ClaudeBar Changelog</title>
+    <link>https://beerbeatbox.github.io/claudebar/appcast.xml</link>
+    <description>Most recent ClaudeBar updates.</description>
+    <language>en</language>
+  </channel>
+</rss>
