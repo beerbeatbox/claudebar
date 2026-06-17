@@ -297,15 +297,18 @@ enum PopoverChannel {
 /// Nudges Dart to recreate its NSStatusItem whenever macOS is liable to have
 /// dropped it. macOS 26 frequently detaches menu-bar items on display
 /// reconfiguration (monitor connect/disconnect, dock/undock, resolution change)
-/// AND across sleep/wake, leaving the icon invisible until the item is recreated
-/// (the sibling app CodexBar hit the same thing — issues #1077/#1088).
+/// AND across sleep/wake and screen lock/unlock, leaving the icon invisible
+/// until the item is recreated (the sibling app CodexBar hit the same thing —
+/// issues #1077/#1088).
 ///
-/// Two distinct signals are needed, because neither covers the other:
-///   • didChangeScreenParametersNotification — display topology changes. It does
-///     NOT fire on a plain idle-sleep→wake (no display reconfig), so it misses
-///     the most common "came back to my Mac and the icon is gone" case.
-///   • NSWorkspace didWake / screensDidWake — sleep/wake. These post on
-///     NSWorkspace's OWN notification center, not the default one.
+/// Several distinct signals are needed, because none covers the others:
+///   • didChangeScreenParametersNotification — display topology changes. Does
+///     NOT fire on a plain idle-sleep→wake (no display reconfig).
+///   • NSWorkspace didWake / screensDidWake — system + display sleep/wake. These
+///     post on NSWorkspace's OWN notification center, not the default one.
+///   • com.apple.screenIsUnlocked — locking the screen (⌃⌘Q) and unlocking it,
+///     which need not put the display to sleep at all, so the wake signals above
+///     can miss it. This is a distributed notification.
 /// Dart recovers UNCONDITIONALLY on these (it cannot reliably tell a
 /// force-hidden item from a present one — the system keeps isVisible == true and
 /// the button frame valid even while the icon is gone), so we just fire on each.
@@ -343,6 +346,14 @@ enum TrayRecoveryChannel {
     ))
     observers.append(workspace.addObserver(
       forName: NSWorkspace.screensDidWakeNotification,
+      object: nil,
+      queue: .main,
+      using: nudge
+    ))
+
+    // Screen unlock lives on the distributed notification center.
+    observers.append(DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("com.apple.screenIsUnlocked"),
       object: nil,
       queue: .main,
       using: nudge
