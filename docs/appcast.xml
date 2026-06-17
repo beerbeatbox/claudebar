@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.4</title>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>1.5.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Fix the menu-bar icon failing to appear at launch (regression in 1.5.3)</li><li>Menu-bar icon recovers across sleep / wake / screen unlock</li><li>Stop the blinking text caret stealing keyboard focus at launch</li></ul> ]]></description>
+      <pubDate>Wed, 17 Jun 2026 18:34:50 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.4/ClaudeBar-1.5.4.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="0MVl5fh8M63sYmFp1c4xg5qwwYwUk4kpft6n30PcMLViAw2/a9VT+VWlAVkKW75Mec+C7P34SJEQUKcICQLdCw=="
+        length="17481876"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.3</title>
       <sparkle:version>12</sparkle:version>
       <sparkle:shortVersionString>1.5.3</sparkle:shortVersionString>
