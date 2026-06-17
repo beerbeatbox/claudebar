@@ -294,16 +294,25 @@ enum PopoverChannel {
   }
 }
 
-/// Notifies Dart of display-topology changes so the tray controller can
-/// recreate its NSStatusItem. macOS 26 frequently detaches menu-bar items when
-/// displays are connected/disconnected, docked/undocked, or sleep/wake, leaving
-/// the icon invisible until the item is recreated (the sibling app CodexBar hit
-/// the same thing — issues #1077/#1088). didChangeScreenParametersNotification
-/// is the high-level signal that covers all of those.
+/// Nudges Dart to recreate its NSStatusItem whenever macOS is liable to have
+/// dropped it. macOS 26 frequently detaches menu-bar items on display
+/// reconfiguration (monitor connect/disconnect, dock/undock, resolution change)
+/// AND across sleep/wake, leaving the icon invisible until the item is recreated
+/// (the sibling app CodexBar hit the same thing — issues #1077/#1088).
+///
+/// Two distinct signals are needed, because neither covers the other:
+///   • didChangeScreenParametersNotification — display topology changes. It does
+///     NOT fire on a plain idle-sleep→wake (no display reconfig), so it misses
+///     the most common "came back to my Mac and the icon is gone" case.
+///   • NSWorkspace didWake / screensDidWake — sleep/wake. These post on
+///     NSWorkspace's OWN notification center, not the default one.
+/// Dart recovers UNCONDITIONALLY on these (it cannot reliably tell a
+/// force-hidden item from a present one — the system keeps isVisible == true and
+/// the button frame valid even while the icon is gone), so we just fire on each.
 enum TrayRecoveryChannel {
   static let channelName = "claudebar/tray"
   private static var channel: FlutterMethodChannel?
-  private static var observer: NSObjectProtocol?
+  private static var observers: [NSObjectProtocol] = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -311,15 +320,33 @@ enum TrayRecoveryChannel {
       binaryMessenger: registrar.messenger
     )
     self.channel = channel
-    // A topology change fires a burst of these; Dart debounces, so just
-    // forward each one as it arrives.
-    observer = NotificationCenter.default.addObserver(
+
+    // Each of these can fire a burst; Dart debounces, so just forward them.
+    let nudge: (Notification) -> Void = { _ in
+      channel.invokeMethod("recover", arguments: nil)
+    }
+
+    observers.append(NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
       object: nil,
-      queue: .main
-    ) { _ in
-      channel.invokeMethod("screenParametersChanged", arguments: nil)
-    }
+      queue: .main,
+      using: nudge
+    ))
+
+    // Sleep/wake lives on the workspace notification center.
+    let workspace = NSWorkspace.shared.notificationCenter
+    observers.append(workspace.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main,
+      using: nudge
+    ))
+    observers.append(workspace.addObserver(
+      forName: NSWorkspace.screensDidWakeNotification,
+      object: nil,
+      queue: .main,
+      using: nudge
+    ))
   }
 }
 
