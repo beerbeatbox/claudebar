@@ -48,6 +48,20 @@
     <description>Most recent ClaudeBar updates (beta channel).</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.6-beta.15</title>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>1.5.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Beta: extra diagnostics for the menu-bar icon disappearing after unlock/wake</li><li>Adds a second recovery pass and a session-active trigger</li></ul> ]]></description>
+      <pubDate>Thu, 18 Jun 2026 07:10:24 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.6-beta.15/ClaudeBar-1.5.6.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="PN0r1xkds1z54I4iemznEAHVEYGBZEAjIIS8+xASmzHksEHjLXT/X1rpy8arkJ+Fj2+R+XP7VGgtOlekH4a1Cw=="
+        length="17487237"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.5</title>
       <sparkle:version>14</sparkle:version>
       <sparkle:shortVersionString>1.5.5</sparkle:shortVersionString>
