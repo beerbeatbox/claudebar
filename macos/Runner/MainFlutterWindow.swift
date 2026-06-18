@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import os
 
 /// Native frosted-glass backdrop for the popover card, like a real macOS menu.
 ///
@@ -334,6 +335,13 @@ enum TrayRecoveryChannel {
   private static var channel: FlutterMethodChannel?
   private static var observers: [NSObjectProtocol] = []
 
+  // os_log surfaces in Console.app even for release builds (unlike Dart's
+  // debugPrint, which is stripped), so a beta tester can capture exactly which
+  // signals fire on unlock and how the Dart-side recovery fares. Filter Console
+  // by subsystem "one.beatbox.claudeUsageBar" (or just the ClaudeBar process).
+  // OSLog (not the newer Logger) keeps this compiling for the 10.15 target.
+  static let log = OSLog(subsystem: "one.beatbox.claudeUsageBar", category: "tray")
+
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: channelName,
@@ -341,40 +349,49 @@ enum TrayRecoveryChannel {
     )
     self.channel = channel
 
-    // Each of these can fire a burst; Dart debounces, so just forward them.
-    let nudge: (Notification) -> Void = { _ in
-      channel.invokeMethod("recover", arguments: nil)
+    // Dart pushes its recovery progress back here so the whole flow — trigger →
+    // recreate → result — is visible in one Console stream in release builds.
+    channel.setMethodCallHandler { call, result in
+      if call.method == "log", let msg = call.arguments as? String {
+        os_log("dart: %{public}@", log: log, type: .info, msg)
+      }
+      result(nil)
+    }
+
+    // Each of these can fire a burst; Dart debounces, so just forward them —
+    // logging the source so we can see which actually arrives on unlock/wake.
+    func nudge(_ source: String) -> (Notification) -> Void {
+      { _ in
+        os_log("recovery trigger: %{public}@", log: log, type: .info, source)
+        channel.invokeMethod("recover", arguments: nil)
+      }
     }
 
     observers.append(NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
-      object: nil,
-      queue: .main,
-      using: nudge
-    ))
+      object: nil, queue: .main, using: nudge("screenParameters")))
 
     // Sleep/wake lives on the workspace notification center.
     let workspace = NSWorkspace.shared.notificationCenter
     observers.append(workspace.addObserver(
       forName: NSWorkspace.didWakeNotification,
-      object: nil,
-      queue: .main,
-      using: nudge
-    ))
+      object: nil, queue: .main, using: nudge("didWake")))
     observers.append(workspace.addObserver(
       forName: NSWorkspace.screensDidWakeNotification,
-      object: nil,
-      queue: .main,
-      using: nudge
-    ))
+      object: nil, queue: .main, using: nudge("screensDidWake")))
+    // The session becoming active also fires on screen unlock (and fast user
+    // switching) — a belt-and-suspenders for com.apple.screenIsUnlocked, whose
+    // distributed delivery to an LSUIElement agent app can be unreliable.
+    observers.append(workspace.addObserver(
+      forName: NSWorkspace.sessionDidBecomeActiveNotification,
+      object: nil, queue: .main, using: nudge("sessionDidBecomeActive")))
 
-    // Screen unlock lives on the distributed notification center.
+    // Screen unlock also posts here, on the distributed notification center.
     observers.append(DistributedNotificationCenter.default().addObserver(
       forName: NSNotification.Name("com.apple.screenIsUnlocked"),
-      object: nil,
-      queue: .main,
-      using: nudge
-    ))
+      object: nil, queue: .main, using: nudge("screenIsUnlocked")))
+
+    os_log("tray recovery observers registered", log: log, type: .info)
   }
 }
 

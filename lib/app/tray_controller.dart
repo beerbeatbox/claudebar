@@ -45,9 +45,21 @@ class TrayController with TrayListener {
   /// the topology has settled.
   Timer? _recoverDebounce;
 
+  /// A second, later recovery pass: after unlock/wake the menu bar can take a
+  /// few seconds to settle, and an item recreated too early gets dropped again.
+  Timer? _recoverDebounceLate;
+
   /// Guards against overlapping recoveries (a display burst and the periodic
   /// self-heal could otherwise run at once).
   bool _recovering = false;
+
+  /// Mirrors a diagnostic line to debugPrint AND to native os_log (via the
+  /// recovery channel), so the recovery flow is visible in Console.app even in
+  /// release builds, where debugPrint is stripped.
+  void _diag(String msg) {
+    debugPrint('[ClaudeBar] $msg');
+    _recoveryChannel.invokeMethod('log', msg);
+  }
 
   Future<void> init() async {
     trayManager.addListener(this);
@@ -96,6 +108,13 @@ class TrayController with TrayListener {
         const Duration(milliseconds: 800),
         () => _recover('display/wake'),
       );
+      // Second pass once the menu bar has surely settled — a recreate done in
+      // the first churning second after unlock/wake can be dropped again.
+      _recoverDebounceLate?.cancel();
+      _recoverDebounceLate = Timer(
+        const Duration(seconds: 3),
+        () => _recover('display/wake (late)'),
+      );
     }
     return null;
   }
@@ -108,6 +127,7 @@ class TrayController with TrayListener {
   Future<void> _recover(String reason) async {
     if (_recovering) return;
     _recovering = true;
+    _diag('recover($reason) start');
     try {
       for (var attempt = 0; attempt < 4; attempt++) {
         if (attempt > 0) {
@@ -117,17 +137,17 @@ class TrayController with TrayListener {
           await trayManager.destroy();
           await _rebuild();
         } catch (e) {
-          debugPrint('[ClaudeBar] tray recovery ($reason) attempt $attempt: $e');
+          _diag('recover($reason) attempt $attempt error: $e');
           continue;
         }
-        if (!await _trayMissing()) {
-          if (attempt > 0) {
-            debugPrint('[ClaudeBar] tray recovered ($reason) on attempt $attempt');
-          }
-          return;
-        }
+        // NOTE: _trayMissing can't see a force-hidden item (macOS keeps its
+        // bounds valid), so "missing=false" here does NOT prove the icon is
+        // visible — the os_log trail tells us whether recreate actually worked.
+        final missing = await _trayMissing();
+        _diag('recover($reason) attempt $attempt: missing=$missing');
+        if (!missing) return;
       }
-      debugPrint('[ClaudeBar] tray still missing after recovery ($reason)');
+      _diag('recover($reason): still missing after retries');
     } finally {
       _recovering = false;
     }
@@ -261,6 +281,7 @@ class TrayController with TrayListener {
   Future<void> _quit() async {
     _countdownTimer?.cancel();
     _recoverDebounce?.cancel();
+    _recoverDebounceLate?.cancel();
     await trayManager.destroy();
     exit(0);
   }
