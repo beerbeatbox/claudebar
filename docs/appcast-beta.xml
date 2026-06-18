@@ -48,6 +48,20 @@
     <description>Most recent ClaudeBar updates (beta channel).</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.5</title>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>1.5.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Add an opt-in beta update channel (Settings → &quot;Receive beta updates&quot;)</li></ul> ]]></description>
+      <pubDate>Thu, 18 Jun 2026 06:52:41 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.5/ClaudeBar-1.5.5.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="A8pTPQ2c7sIlWqBk36I5NnvMDNuKuOjOtbQGIMd257xGZczCjISpfYPZwZJlrYr3MpcENBQTt1CqS96UhdMTCA=="
+        length="17482964"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.4</title>
       <sparkle:version>13</sparkle:version>
       <sparkle:shortVersionString>1.5.4</sparkle:shortVersionString>
