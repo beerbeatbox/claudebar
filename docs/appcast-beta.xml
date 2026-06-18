@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ClaudeBar Sparkle appcast — BETA channel.
+
+  Served via GitHub Pages at:
+    https://beerbeatbox.github.io/claudebar/appcast-beta.xml
+  Subscribed to by users who enable Settings > "Receive beta updates"; the app
+  switches its feed URL to this file (lib/settings/prefs.dart). It carries beta
+  (pre-release) builds AND every stable release, so opting in never holds a
+  tester back from a stable update.
+
+  Maintained by the release workflow: a beta release prepends here only; a
+  stable release prepends to BOTH this file and appcast.xml. Do not hand-edit.
+
+  PER RELEASE: prepend a fresh <item> inside <channel> (newest first). Get the
+  edSignature + length from `rps ship` output (it runs sign_update on the zip),
+  or run: dart run auto_updater:sign_update build/dist/ClaudeBar-X.Y.Z.zip
+
+  Item template (copy, fill in, place directly below <language>):
+
+    <item>
+      <title>Version X.Y.Z</title>
+      <sparkle:version>N</sparkle:version>
+      <sparkle:shortVersionString>X.Y.Z</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>What changed.</li></ul> ]]></description>
+      <pubDate>Day, DD Mon YYYY HH:MM:SS +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/vX.Y.Z/ClaudeBar-X.Y.Z.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="PASTE_FROM_sign_update"
+        length="PASTE_FROM_sign_update"
+        type="application/octet-stream" />
+    </item>
+
+  Notes:
+    * sparkle:version is CFBundleVersion = the pubspec build number (the +N).
+      It is what Sparkle compares to decide "is there a newer build"; it MUST
+      strictly increase every release. shortVersionString is display-only.
+    * sparkle:minimumSystemVersion must be three-part (10.15.0, not 10.15).
+    * length is bytes; sign_update computes it, do not hand-edit.
+    * The enclosure points at the .zip release asset, not the .dmg.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>ClaudeBar Changelog (beta)</title>
+    <link>https://beerbeatbox.github.io/claudebar/appcast-beta.xml</link>
+    <description>Most recent ClaudeBar updates (beta channel).</description>
+    <language>en</language>
+    <item>
+      <title>Version 1.5.4</title>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>1.5.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Fix the menu-bar icon failing to appear at launch (regression in 1.5.3)</li><li>Menu-bar icon recovers across sleep / wake / screen unlock</li><li>Stop the blinking text caret stealing keyboard focus at launch</li></ul> ]]></description>
+      <pubDate>Wed, 17 Jun 2026 18:34:50 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.4/ClaudeBar-1.5.4.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="0MVl5fh8M63sYmFp1c4xg5qwwYwUk4kpft6n30PcMLViAw2/a9VT+VWlAVkKW75Mec+C7P34SJEQUKcICQLdCw=="
+        length="17481876"
+        type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.5.3</title>
+      <sparkle:version>12</sparkle:version>
+      <sparkle:shortVersionString>1.5.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Fix menu-bar icon disappearing after sleep / wake / screen unlock</li><li>Fix blinking text caret stealing keyboard focus at launch</li></ul> ]]></description>
+      <pubDate>Wed, 17 Jun 2026 18:17:23 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.3/ClaudeBar-1.5.3.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="bAJZxvtjKgdlMKp1/cEJPzbe33pZpnpSK/XAR14exmfTWa/amPXZjnA6bcA57ERTikORkgD50Ijy/S2bY9JnAg=="
+        length="17481411"
+        type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.5.2</title>
+      <sparkle:version>11</sparkle:version>
+      <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>ClaudeBar can now update itself — a new "Check for Updates…" item in the menu, plus automatic daily background checks.</li>
+        </ul>
+      ]]></description>
+      <pubDate>Wed, 17 Jun 2026 01:10:09 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.2/ClaudeBar-1.5.2.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="lJ3Uc8F6OJoUpQxRQJTCBxGGNVffMHhXHgXEWH74XSZGNpbZzBBA9hPVceuq2QGzDEecVYDWlK655YqH7QjaCA=="
+        length="17511637"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

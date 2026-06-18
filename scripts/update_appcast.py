@@ -12,7 +12,7 @@ import os
 import sys
 import time
 
-APPCAST = os.path.join(os.path.dirname(__file__), "..", "docs", "appcast.xml")
+DOCS = os.path.join(os.path.dirname(__file__), "..", "docs")
 ANCHOR = "<language>en</language>\n"
 
 
@@ -38,18 +38,31 @@ def main() -> int:
     ap.add_argument("--build", required=True)     # N     (CFBundleVersion / +N)
     ap.add_argument("--edsig", required=True)
     ap.add_argument("--length", required=True)
+    # Appcast file to prepend to (appcast.xml = stable, appcast-beta.xml = beta).
+    ap.add_argument("--appcast", default="appcast.xml")
+    # Release tag the asset lives under; differs from the version for betas
+    # (e.g. v1.5.6-beta.14 while the asset is still ClaudeBar-1.5.6.zip).
+    ap.add_argument("--tag", default=None)
     args = ap.parse_args()
+
+    appcast_path = os.path.join(DOCS, os.path.basename(args.appcast))
+    tag = args.tag or f"v{args.version}"
 
     notes_html = notes_to_html(os.environ.get("NOTES", ""))
     if not notes_html:
         print("error: NOTES env produced no list items", file=sys.stderr)
         return 1
 
-    with open(APPCAST, encoding="utf-8") as f:
+    with open(appcast_path, encoding="utf-8") as f:
         content = f.read()
 
-    if f"<title>Version {args.version}</title>" in content:
-        print(f"note: appcast already lists v{args.version}; leaving unchanged")
+    # Title carries the full tag (minus the leading "v") so beta builds that
+    # share an X.Y.Z — e.g. 1.5.6-beta.14 and 1.5.6-beta.15 — stay distinct and
+    # the idempotency check below doesn't collapse them.
+    title_version = tag[1:] if tag.startswith("v") else tag
+
+    if f"<title>Version {title_version}</title>" in content:
+        print(f"note: {args.appcast} already lists {title_version}; leaving unchanged")
         return 0
 
     idx = content.find(ANCHOR)
@@ -61,14 +74,14 @@ def main() -> int:
     pub_date = time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime())
     item = (
         "    <item>\n"
-        f"      <title>Version {args.version}</title>\n"
+        f"      <title>Version {title_version}</title>\n"
         f"      <sparkle:version>{args.build}</sparkle:version>\n"
         f"      <sparkle:shortVersionString>{args.version}</sparkle:shortVersionString>\n"
         "      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>\n"
         f"      <description><![CDATA[ {notes_html} ]]></description>\n"
         f"      <pubDate>{pub_date}</pubDate>\n"
         "      <enclosure\n"
-        f"        url=\"https://github.com/beerbeatbox/claudebar/releases/download/v{args.version}/ClaudeBar-{args.version}.zip\"\n"
+        f"        url=\"https://github.com/beerbeatbox/claudebar/releases/download/{tag}/ClaudeBar-{args.version}.zip\"\n"
         "        sparkle:os=\"macos\"\n"
         f"        sparkle:edSignature=\"{args.edsig}\"\n"
         f"        length=\"{args.length}\"\n"
@@ -78,9 +91,9 @@ def main() -> int:
 
     insert_at = idx + len(ANCHOR)
     new = content[:insert_at] + item + content[insert_at:]
-    with open(APPCAST, "w", encoding="utf-8") as f:
+    with open(appcast_path, "w", encoding="utf-8") as f:
         f.write(new)
-    print(f"Added appcast item for v{args.version} (build {args.build})")
+    print(f"Added {title_version} (build {args.build}) to {args.appcast}")
     return 0
 
 

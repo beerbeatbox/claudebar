@@ -66,6 +66,25 @@ class SettingsPanel extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _Label('Receive beta updates', t),
+            Switch.adaptive(
+              value: settings.betaUpdates,
+              activeTrackColor: t.accent,
+              onChanged: (v) => controller.setBetaUpdates(v),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Get pre-release builds early to help test fixes. '
+          'Stable releases still arrive on this channel.',
+          style: TextStyle(fontSize: 10.5, height: 1.3, color: t.text3),
+        ),
         const SizedBox(height: 8),
         Divider(color: t.hairline, height: 24, thickness: 0.5),
         Align(

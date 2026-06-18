@@ -21,6 +21,14 @@ on:
         description: "Release notes — Markdown bullet lines (one per line, '- …')"
         required: true
         type: string
+      channel:
+        description: "Release channel"
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - beta
 
 permissions:
   contents: write
@@ -46,12 +54,28 @@ jobs:
           if [[ -z "$VERSION" || -z "$BUILD" ]]; then
             echo "::error::Could not parse 'version: X.Y.Z+N' from pubspec.yaml"; exit 1
           fi
-          if gh release view "v$VERSION" >/dev/null 2>&1; then
-            echo "::error::Release v$VERSION already exists — bump pubspec.yaml first."; exit 1
+          CHANNEL="${{ github.event.inputs.channel }}"
+          # Beta releases get a distinct, prerelease tag keyed on the build
+          # number (which must strictly increase), so several betas can share an
+          # X.Y.Z without colliding; stable keeps the plain vX.Y.Z tag.
+          if [[ "$CHANNEL" == "beta" ]]; then
+            TAG="v${VERSION}-beta.${BUILD}"
+            PRERELEASE="true"
+          else
+            TAG="v${VERSION}"
+            PRERELEASE="false"
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
-          echo "Releasing v$VERSION (build $BUILD)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists — bump the pubspec build number first."; exit 1
+          fi
+          {
+            echo "version=$VERSION"
+            echo "build=$BUILD"
+            echo "tag=$TAG"
+            echo "channel=$CHANNEL"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (build $BUILD, channel $CHANNEL)"
 
       - name: Install Flutter (fvm, pinned by .fvmrc)
         run: |
@@ -136,40 +160,69 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ github.event.inputs.notes }}
           V: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          CHANNEL: ${{ steps.ver.outputs.channel }}
+          PRERELEASE: ${{ steps.ver.outputs.prerelease }}
         run: |
           set -euo pipefail
-          gh release create "v$V" \
+          # The DMG/zip are named by the marketing version; the tag may carry a
+          # -beta suffix, so they can differ.
+          TITLE="ClaudeBar $V"
+          PRE_FLAG=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            TITLE="ClaudeBar $V (beta)"
+            PRE_FLAG=(--prerelease)
+          fi
+          gh release create "$TAG" \
             "build/dist/ClaudeBar-$V.dmg" "build/dist/ClaudeBar-$V.zip" \
             --target "$GITHUB_SHA" \
-            --title "ClaudeBar $V" \
-            --notes "$NOTES"
+            --title "$TITLE" \
+            --notes "$NOTES" \
+            "${PRE_FLAG[@]}"
 
       - name: Update appcast and push
         env:
           NOTES: ${{ github.event.inputs.notes }}
+          V: ${{ steps.ver.outputs.version }}
+          BUILD: ${{ steps.ver.outputs.build }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          CHANNEL: ${{ steps.ver.outputs.channel }}
+          EDSIG: ${{ steps.ship.outputs.edsig }}
+          LENGTH: ${{ steps.ship.outputs.length }}
         run: |
           set -euo pipefail
-          python3 scripts/update_appcast.py \
-            --version "${{ steps.ver.outputs.version }}" \
-            --build "${{ steps.ver.outputs.build }}" \
-            --edsig "${{ steps.ship.outputs.edsig }}" \
-            --length "${{ steps.ship.outputs.length }}"
-          if git diff --quiet -- docs/appcast.xml; then
+          prepend() {
+            python3 scripts/update_appcast.py \
+              --version "$V" --build "$BUILD" --edsig "$EDSIG" --length "$LENGTH" \
+              --tag "$TAG" --appcast "$1"
+          }
+          # Beta builds land only in the beta feed; stable builds go to both, so
+          # beta testers keep receiving stable releases over the beta channel.
+          if [[ "$CHANNEL" == "beta" ]]; then
+            prepend appcast-beta.xml
+            FILES=(docs/appcast-beta.xml)
+          else
+            prepend appcast.xml
+            prepend appcast-beta.xml
+            FILES=(docs/appcast.xml docs/appcast-beta.xml)
+          fi
+          git add "${FILES[@]}"
+          if git diff --cached --quiet; then
             echo "appcast unchanged — nothing to push"; exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/appcast.xml
-          git commit -m "chore: appcast for v${{ steps.ver.outputs.version }}"
+          git commit -m "chore: appcast for $TAG"
           git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Summary
         if: success()
         run: |
-          V="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
           {
-            echo "### Released ClaudeBar v$V :rocket:"
+            echo "### Released ClaudeBar $TAG :rocket:"
             echo
-            echo "- Release: https://github.com/beerbeatbox/claudebar/releases/tag/v$V"
+            echo "- Channel: ${{ steps.ver.outputs.channel }}"
+            echo "- Release: https://github.com/beerbeatbox/claudebar/releases/tag/$TAG"
             echo "- Appcast updated — existing installs will see the update on their next check."
           } >> "$GITHUB_STEP_SUMMARY"

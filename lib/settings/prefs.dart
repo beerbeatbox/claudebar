@@ -1,9 +1,27 @@
+import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Which window the menu-bar number reflects (spec §2 — user-switchable).
 enum MenuBarMetric { session, weekly }
+
+/// SharedPreferences key for the beta opt-in; read in `main()` to pick the
+/// update feed before the first scheduled check, so it must match the key the
+/// SettingsController writes.
+const String kBetaUpdatesPref = 'betaUpdates';
+
+/// Sparkle appcast feeds (served from GitHub Pages). Beta testers track a
+/// separate feed that also carries every stable release, so opting in never
+/// holds them back from a stable update; opting out returns them to the
+/// stable-only feed.
+const String stableAppcastUrl =
+    'https://beerbeatbox.github.io/claudebar/appcast.xml';
+const String betaAppcastUrl =
+    'https://beerbeatbox.github.io/claudebar/appcast-beta.xml';
+
+/// The feed URL for the user's current channel choice.
+String appcastUrlFor(bool beta) => beta ? betaAppcastUrl : stableAppcastUrl;
 
 /// Persisted user settings (spec §10, Phase 2).
 class Settings {
@@ -13,21 +31,28 @@ class Settings {
   final MenuBarMetric metric;
   final bool launchAtLogin;
 
+  /// Opt-in to pre-release builds: switches the Sparkle feed to the beta
+  /// appcast. Off by default so existing users stay on stable.
+  final bool betaUpdates;
+
   const Settings({
     this.refreshMinutes = 5,
     this.metric = MenuBarMetric.session,
     this.launchAtLogin = false,
+    this.betaUpdates = false,
   });
 
   Settings copyWith({
     int? refreshMinutes,
     MenuBarMetric? metric,
     bool? launchAtLogin,
+    bool? betaUpdates,
   }) {
     return Settings(
       refreshMinutes: refreshMinutes ?? this.refreshMinutes,
       metric: metric ?? this.metric,
       launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+      betaUpdates: betaUpdates ?? this.betaUpdates,
     );
   }
 }
@@ -41,6 +66,7 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
 const _kInterval = 'refreshMinutes';
 const _kMetric = 'menuBarMetric';
 const _kLaunch = 'launchAtLogin';
+const _kBeta = kBetaUpdatesPref;
 
 class SettingsController extends Notifier<Settings> {
   @override
@@ -53,6 +79,7 @@ class SettingsController extends Notifier<Settings> {
       metric: MenuBarMetric.values[
           (prefs.getInt(_kMetric) ?? 0).clamp(0, MenuBarMetric.values.length - 1)],
       launchAtLogin: prefs.getBool(_kLaunch) ?? false,
+      betaUpdates: prefs.getBool(_kBeta) ?? false,
     );
   }
 
@@ -77,6 +104,15 @@ class SettingsController extends Notifier<Settings> {
     } else {
       await launchAtStartup.disable();
     }
+  }
+
+  /// Switch the Sparkle update feed between the stable and beta appcasts. Takes
+  /// effect on the next check (scheduled or the tray's "Check for Updates…");
+  /// main() applies the persisted choice at launch.
+  Future<void> setBetaUpdates(bool value) async {
+    state = state.copyWith(betaUpdates: value);
+    await _prefs.setBool(_kBeta, value);
+    await autoUpdater.setFeedURL(appcastUrlFor(value));
   }
 }
 

@@ -15,23 +15,24 @@ import 'settings/prefs.dart';
 import 'state/usage_controller.dart';
 import 'ui/popover_panel.dart';
 
-/// Sparkle appcast feed, served from GitHub Pages. Each release prepends an
-/// `<item>` here (see scripts/release_dmg.sh and the release skill).
-const String _appcastUrl = 'https://beerbeatbox.github.io/claudebar/appcast.xml';
-
 late final PopoverWindow _popover;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
 
+  final prefs = await SharedPreferences.getInstance();
+
   // In-app auto-update (Sparkle via auto_updater). setFeedURL must run before
-  // any update check. We don't force a check at launch — Sparkle runs its own
-  // scheduled background checks (daily; minimum 3600s, 0 disables) — while the
-  // tray's "Check for Updates…" item lets the user check on demand. A
-  // user-initiated check activates the app so Sparkle's dialog comes to the
-  // front, which matters for an LSUIElement (menu-bar) app with no key window.
-  await autoUpdater.setFeedURL(_appcastUrl);
+  // any update check, and points at the stable or beta appcast per the user's
+  // opt-in (Settings → "Receive beta updates"). We don't force a check at
+  // launch — Sparkle runs its own scheduled background checks (daily; minimum
+  // 3600s, 0 disables) — while the tray's "Check for Updates…" item lets the
+  // user check on demand. A user-initiated check activates the app so Sparkle's
+  // dialog comes to the front, which matters for an LSUIElement (menu-bar) app
+  // with no key window.
+  final beta = prefs.getBool(kBetaUpdatesPref) ?? false;
+  await autoUpdater.setFeedURL(appcastUrlFor(beta));
   await autoUpdater.setScheduledCheckInterval(86400);
 
   // Register the login-item handle so the Settings toggle can enable/disable
@@ -40,8 +41,6 @@ Future<void> main() async {
     appName: 'ClaudeBar',
     appPath: Platform.resolvedExecutable,
   );
-
-  final prefs = await SharedPreferences.getInstance();
 
   final container = ProviderContainer(
     overrides: [
