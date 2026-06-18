@@ -45,10 +45,6 @@ class TrayController with TrayListener {
   /// the topology has settled.
   Timer? _recoverDebounce;
 
-  /// A second, later recovery pass: after unlock/wake the menu bar can take a
-  /// few seconds to settle, and an item recreated too early gets dropped again.
-  Timer? _recoverDebounceLate;
-
   /// Guards against overlapping recoveries (a display burst and the periodic
   /// self-heal could otherwise run at once).
   bool _recovering = false;
@@ -97,26 +93,32 @@ class TrayController with TrayListener {
 
   Future<dynamic> _onRecoveryCall(MethodCall call) async {
     if (call.method == 'recover') {
-      // The system is usually mid-flux for a moment after the first event (the
-      // topology settling, or the menu bar rebuilding after wake); wait for it
-      // to settle, coalescing the burst into one recovery. We recover
-      // unconditionally rather than checking _trayMissing first: when macOS
-      // force-hides the item it keeps the bounds valid (isVisible stays true),
-      // so the only reliable cure is to recreate it on every such event.
+      // Recreating the NSStatusItem gives it a fresh menu-bar slot, and menu-bar
+      // managers (Ice, Bartender) treat that new item as unmanaged and tuck it
+      // into their hidden section — which looked exactly like "the icon vanished
+      // after unlock". So DON'T recreate on every wake/unlock; only recreate
+      // when the item is genuinely gone. When it's still there (the common case)
+      // leave it untouched so it keeps the position the user/Ice gave it. The
+      // system is mid-flux right after the event, so let it settle first.
       _recoverDebounce?.cancel();
       _recoverDebounce = Timer(
         const Duration(milliseconds: 800),
-        () => _recover('display/wake'),
-      );
-      // Second pass once the menu bar has surely settled — a recreate done in
-      // the first churning second after unlock/wake can be dropped again.
-      _recoverDebounceLate?.cancel();
-      _recoverDebounceLate = Timer(
-        const Duration(seconds: 3),
-        () => _recover('display/wake (late)'),
+        () => _recoverIfMissing('display/wake'),
       );
     }
     return null;
+  }
+
+  /// Event-driven recovery: recreate only when the status item is actually
+  /// missing, so a present item is never needlessly rebuilt (which would reset
+  /// its position and trip menu-bar managers into hiding it).
+  Future<void> _recoverIfMissing(String reason) async {
+    if (_recovering) return;
+    if (await _trayMissing()) {
+      await _recover(reason);
+    } else {
+      _diag('recover($reason) skipped: item present, leaving position intact');
+    }
   }
 
   /// Rebuilds the status item from scratch. Re-pushing the icon is not enough
@@ -281,7 +283,6 @@ class TrayController with TrayListener {
   Future<void> _quit() async {
     _countdownTimer?.cancel();
     _recoverDebounce?.cancel();
-    _recoverDebounceLate?.cancel();
     await trayManager.destroy();
     exit(0);
   }

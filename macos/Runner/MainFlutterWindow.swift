@@ -327,9 +327,11 @@ enum PopoverChannel {
 ///   • com.apple.screenIsUnlocked — locking the screen (⌃⌘Q) and unlocking it,
 ///     which need not put the display to sleep at all, so the wake signals above
 ///     can miss it. This is a distributed notification.
-/// Dart recovers UNCONDITIONALLY on these (it cannot reliably tell a
-/// force-hidden item from a present one — the system keeps isVisible == true and
-/// the button frame valid even while the icon is gone), so we just fire on each.
+/// Dart recovers only when the item is actually GONE on these events. It used
+/// to recreate unconditionally, but recreating gives the NSStatusItem a fresh
+/// menu-bar slot, and menu-bar managers (Ice, Bartender) then file that "new"
+/// item into their hidden section — which is exactly what looked like the icon
+/// vanishing after unlock. A present item is now left in place.
 enum TrayRecoveryChannel {
   static let channelName = "claudebar/tray"
   private static var channel: FlutterMethodChannel?
