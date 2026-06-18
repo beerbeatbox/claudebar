@@ -48,6 +48,20 @@
     <description>Most recent ClaudeBar updates (beta channel).</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.6-beta.16</title>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>1.5.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>Fix the menu-bar icon getting moved into Ice/Bartender&#x27;s hidden section after unlock (only recreate the icon when it is actually gone, so its position is preserved)</li></ul> ]]></description>
+      <pubDate>Thu, 18 Jun 2026 07:42:49 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.6-beta.16/ClaudeBar-1.5.6.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="F+LiYgCmAx7kEtO0k881GmmNNH3hxYNPxEMlV46CBEJP+7Kc6XDBJ138D8SviEGHHeCfG5vy0oYm3ZbSxAbpDw=="
+        length="17487125"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.6-beta.15</title>
       <sparkle:version>15</sparkle:version>
       <sparkle:shortVersionString>1.5.6</sparkle:shortVersionString>
