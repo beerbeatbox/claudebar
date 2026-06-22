@@ -48,6 +48,20 @@
     <description>Most recent ClaudeBar updates (beta channel).</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.7</title>
+      <sparkle:version>20</sparkle:version>
+      <sparkle:shortVersionString>1.5.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**Fixes ClaudeBar hanging at launch with no menu-bar icon** — a Flutter engine change had merged the platform and UI threads, which could deadlock the menu-bar setup on startup so the app never appeared (and couldn&#x27;t be reopened). ClaudeBar now opts out of that mode and launches reliably.</li><li>Lost the menu-bar icon after sleep/wake? Just open ClaudeBar again from Applications or Spotlight and the icon comes right back — no force-quit needed.</li><li>Clearer guidance when the Claude Code CLI is missing or broken: ClaudeBar now says &quot;Claude Code not found&quot; and tells you to install it, instead of a misleading &quot;update the app&quot; message.</li></ul> ]]></description>
+      <pubDate>Mon, 22 Jun 2026 07:56:30 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.7/ClaudeBar-1.5.7.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="5sQ85EH+BmZf8IxbXRoiFZjOnGP+g5eriKrs240Oi1PPh+NfEW6qXTxrh5T+jSDhYJ8Bpkc1rUO1ylnpxEbxBQ=="
+        length="17490874"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.7-beta.19</title>
       <sparkle:version>19</sparkle:version>
       <sparkle:shortVersionString>1.5.7</sparkle:shortVersionString>
