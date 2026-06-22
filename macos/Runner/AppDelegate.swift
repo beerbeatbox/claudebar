@@ -14,6 +14,20 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
+  // The user relaunched ClaudeBar while it was already running — almost always
+  // because the menu-bar icon vanished after a long sleep/wake and they tried to
+  // "open it again" from Applications/Spotlight/Dock. ClaudeBar is a single
+  // instance LSUIElement agent, so LaunchServices routes that reopen to the live
+  // instance instead of starting a new one; with no handler it's a silent no-op,
+  // which is exactly the "it won't open" people report. Treat the reopen as an
+  // explicit "bring the icon back" and force-recreate the status item (force, so
+  // it fires even for a force-hidden item that still reports valid bounds and
+  // would otherwise be skipped by the bounds-based wake recovery).
+  override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    TrayRecoveryChannel.requestRecover(force: true, source: "reopen")
+    return true
+  }
+
   // Running straight from the mounted .dmg crashes the moment the image is
   // ejected: once the backing vnode is force-unmounted, the next page-in of the
   // app's code raises SIGBUS (we saw exactly this in a crash report). Nudge the

@@ -363,10 +363,7 @@ enum TrayRecoveryChannel {
     // Each of these can fire a burst; Dart debounces, so just forward them —
     // logging the source so we can see which actually arrives on unlock/wake.
     func nudge(_ source: String) -> (Notification) -> Void {
-      { _ in
-        os_log("recovery trigger: %{public}@", log: log, type: .info, source)
-        channel.invokeMethod("recover", arguments: nil)
-      }
+      { _ in requestRecover(force: false, source: source) }
     }
 
     observers.append(NotificationCenter.default.addObserver(
@@ -394,6 +391,18 @@ enum TrayRecoveryChannel {
       object: nil, queue: .main, using: nudge("screenIsUnlocked")))
 
     os_log("tray recovery observers registered", log: log, type: .info)
+  }
+
+  /// Asks Dart to bring the status item back. `force` recreates it even when
+  /// macOS still reports valid bounds for it (a force-hidden / evicted item),
+  /// which is what we want when the user has *explicitly* reopened the app
+  /// because the icon is gone — the conditional, bounds-based recovery would
+  /// otherwise see "present" and do nothing. Wake/display events pass
+  /// force=false so a healthy item keeps its menu-bar position.
+  static func requestRecover(force: Bool, source: String) {
+    os_log("recovery trigger: %{public}@ (force=%{public}@)",
+           log: log, type: .info, source, force ? "true" : "false")
+    channel?.invokeMethod("recover", arguments: ["force": force])
   }
 }
 

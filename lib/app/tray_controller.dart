@@ -93,18 +93,33 @@ class TrayController with TrayListener {
 
   Future<dynamic> _onRecoveryCall(MethodCall call) async {
     if (call.method == 'recover') {
-      // Recreating the NSStatusItem gives it a fresh menu-bar slot, and menu-bar
-      // managers (Ice, Bartender) treat that new item as unmanaged and tuck it
-      // into their hidden section — which looked exactly like "the icon vanished
-      // after unlock". So DON'T recreate on every wake/unlock; only recreate
-      // when the item is genuinely gone. When it's still there (the common case)
-      // leave it untouched so it keeps the position the user/Ice gave it. The
-      // system is mid-flux right after the event, so let it settle first.
+      final args = call.arguments;
+      final force = args is Map && args['force'] == true;
       _recoverDebounce?.cancel();
-      _recoverDebounce = Timer(
-        const Duration(milliseconds: 800),
-        () => _recoverIfMissing('display/wake'),
-      );
+      if (force) {
+        // Explicit user reopen (clicked the app again because the icon is gone).
+        // _trayMissing can't see a force-hidden / evicted item — macOS keeps its
+        // bounds valid — so the conditional path below would wrongly skip. The
+        // user has told us it's gone, so recreate unconditionally; only a tiny
+        // settle delay, since there's no display burst to coalesce here.
+        _recoverDebounce = Timer(
+          const Duration(milliseconds: 200),
+          () => _recover('reopen'),
+        );
+      } else {
+        // Recreating the NSStatusItem gives it a fresh menu-bar slot, and
+        // menu-bar managers (Ice, Bartender) treat that new item as unmanaged
+        // and tuck it into their hidden section — which looked exactly like "the
+        // icon vanished after unlock". So DON'T recreate on every wake/unlock;
+        // only recreate when the item is genuinely gone. When it's still there
+        // (the common case) leave it untouched so it keeps the position the
+        // user/Ice gave it. The system is mid-flux right after the event, so let
+        // it settle first.
+        _recoverDebounce = Timer(
+          const Duration(milliseconds: 800),
+          () => _recoverIfMissing('display/wake'),
+        );
+      }
     }
     return null;
   }
