@@ -30,6 +30,18 @@
 	<string>NSApplication</string>
 	<key>LSUIElement</key>
 	<true/>
+	<!-- Opt OUT of Flutter's merged UI+platform thread (the engine default since
+	     Flutter 3.35; pinned here at 3.41.6 via .fvmrc). With the threads merged,
+	     window_manager / tray_manager do blocking platform-channel work during
+	     main() that races into a deadlock on the single shared thread: the engine
+	     prints "Running with merged UI and platform thread. Experimental." and
+	     then the app hangs at launch with no status item and no window (it never
+	     gets far enough to create the tray) — exactly the "installed it, won't
+	     open, no icon" failure. Forcing the classic separate-thread model
+	     restores a reliable launch. (Flutter warns this opt-out will be removed
+	     eventually; revisit once the menu-bar plugins are merged-thread safe.) -->
+	<key>FLTEnableMergedPlatformUIThread</key>
+	<false/>
 	<!-- Sparkle EdDSA public key. The matching PRIVATE key lives in the login
 	     Keychain (search "sparkle"); back it up — it cannot be regenerated.
 	     See the release skill for the export/import runbook. The feed URL is set
