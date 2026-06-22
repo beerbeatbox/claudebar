@@ -285,7 +285,7 @@ class CliUsageSource {
       '/usr/local/bin/claude',
     ];
     for (final c in candidates) {
-      if (File(c).existsSync()) return _binary = c;
+      if (File(c).existsSync() && _isExecutable(c)) return _binary = c;
     }
     try {
       final r = await Process.run('/bin/zsh', ['-lc', 'command -v claude'])
@@ -296,12 +296,32 @@ class CliUsageSource {
           .split('\n')
           .where((l) => l.trim().isNotEmpty);
       final path = lines.isEmpty ? '' : lines.last.trim();
-      if (r.exitCode == 0 && path.isNotEmpty && File(path).existsSync()) {
+      if (r.exitCode == 0 &&
+          path.isNotEmpty &&
+          File(path).existsSync() &&
+          _isExecutable(path)) {
         return _binary = path;
       }
     } catch (_) {}
     _binary = '';
     return null;
+  }
+
+  /// True when [path] resolves to a file with an execute bit set. A broken
+  /// `claude` install — e.g. an npm symlink left pointing at a non-executable
+  /// stub (`...claude.exe`, mode `rw-r--r--`) when its postinstall never
+  /// fetched the real binary — exists on disk but can only ever yield EACCES
+  /// "Permission denied" when spawned. Skipping it lets resolution fall through
+  /// to a working install, and when there is none we report "CLI not found"
+  /// (accurate) instead of misclassifying the dead probe as a format change
+  /// ("Update ClaudeBar?"). statSync follows the symlink, so this checks the
+  /// real target's permissions.
+  bool _isExecutable(String path) {
+    try {
+      return (File(path).statSync().mode & 0x49) != 0; // any of u/g/o +x (0o111)
+    } catch (_) {
+      return false;
+    }
   }
 
   String _augmentedPath() {
