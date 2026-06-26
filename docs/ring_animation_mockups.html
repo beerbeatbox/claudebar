@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ClaudeBar — Ring animation concepts</title>
+<style>
+  :root {
+    --green: #3DA35D;
+    --amber: #E0A33E;
+    --red:   #D9544D;
+    --track-dark:  rgba(255,255,255,0.30);
+    --track-light: rgba(0,0,0,0.20);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 -apple-system, "SF Pro Text", Segoe UI, Roboto, sans-serif;
+    background: #1a1a1c;
+    color: #e8e8ea;
+    padding: 32px 28px 64px;
+  }
+  h1 { font-size: 20px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.2px; }
+  .sub { color: #9a9aa0; margin: 0 0 28px; max-width: 720px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 30px 0 2px; letter-spacing: -0.1px; }
+  .desc { color: #9a9aa0; font-size: 13px; margin: 0 0 14px; max-width: 720px; }
+  .reco { color: var(--green); font-weight: 600; }
+
+  /* A simulated menu-bar strip so the icon is judged in context. */
+  .grid { display: flex; flex-wrap: wrap; gap: 18px; }
+  .tile {
+    border: 1px solid #2c2c30;
+    border-radius: 12px;
+    overflow: hidden;
+    width: 230px;
+    background: #232327;
+  }
+  .menubar {
+    height: 26px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 6px;
+    font-size: 11px;
+    color: #d8d8da;
+  }
+  .menubar.light { background: #d7d7d8; color: #222; }
+  .menubar.dark  { background: #2b2b2e; }
+  .menubar .title { font-variant-numeric: tabular-nums; opacity: 0.85; }
+  .zoom {
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      repeating-conic-gradient(#2a2a2e 0% 25%, #262629 0% 50%) 50% / 18px 18px;
+  }
+  .zoom.light {
+    background:
+      repeating-conic-gradient(#e9e9ea 0% 25%, #e1e1e2 0% 50%) 50% / 18px 18px;
+  }
+  .cap { padding: 8px 12px 12px; font-size: 11px; color: #8a8a90; border-top: 1px solid #2c2c30; }
+
+  svg.bar  { width: 18px; height: 18px; display: block; }
+  svg.big  { width: 132px; height: 132px; display: block; }
+
+  .ring-track-d { stroke: var(--track-dark);  fill: none; }
+  .ring-track-l { stroke: var(--track-light); fill: none; }
+
+  /* ---------- A. Indeterminate spinner (refresh) ---------- */
+  .spin-arc { animation: spin 0.9s linear infinite; transform-origin: 9px 9px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- B. Fill-to-value (on new data) ---------- */
+  /* C = 2*pi*6 = 37.699; animate dashoffset from full(=hidden) to target. */
+  .fill-arc {
+    stroke-dasharray: 37.699;
+    animation: fill 2.2s ease-in-out infinite;
+  }
+  @keyframes fill {
+    0%        { stroke-dashoffset: 37.699; }            /* 0%  */
+    45%, 75%  { stroke-dashoffset: 12.95;  }            /* ~66% target */
+    100%      { stroke-dashoffset: 37.699; }
+  }
+
+  /* ---------- C. Breathing pulse (near limit) ---------- */
+  .breathe { animation: breathe 1.4s ease-in-out infinite; transform-origin: 9px 9px; }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.55; stroke-width: 2.6; }
+    50%      { opacity: 1;    stroke-width: 3.1; }
+  }
+
+  /* ---------- D. Comet highlight on the arc (idle subtle) ---------- */
+  /* The real usage arc stays put; a short bright dash laps the filled span. */
+  .comet { animation: spin 1.6s linear infinite; transform-origin: 9px 9px; }
+</style>
+</head>
+<body>
+
+<h1>ClaudeBar — Ring animation concepts</h1>
+<p class="sub">
+  ทุกแบบยึดวงแหวน usage เดิม (r=6, stroke 2.6, เริ่มที่ 12 นาฬิกา) แล้วเพิ่ม motion
+  เป็น layer ตาม"สถานะ" — ไม่ทิ้ง gauge. ซ้าย = ขนาดจริงบน menu bar, ขวา = ซูม ~7×.
+  พื้นหลังหมากรุกไว้เช็คความคมตอนทับ wallpaper.
+</p>
+
+<!-- ============ A ============ -->
+<h2>A · Indeterminate spinner — ตอนกำลัง refresh <span class="reco">(แนะนำสำหรับ loading)</span></h2>
+<p class="desc">
+  ระหว่าง spawn <code>claude -p "/usage"</code> วงแหวนความจริงถูกแทนด้วยส่วนโค้งสั้นๆ
+  หมุนรอบ track (เหมือน Material indeterminate) พอข้อมูลมาถึงค่อย snap กลับเป็น % จริง.
+  สื่อ "กำลังโหลด" ชัด และหยุดเองเมื่อเสร็จ → ประหยัดแบต.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="spin-arc" d="M9 3 A6 6 0 0 1 14.2 6" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">Ready</span></div>
+    <div class="zoom dark"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="spin-arc" d="M9 3 A6 6 0 0 1 14.2 6" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">spinner ~0.9s/รอบ · arc ≈ 90°</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="spin-arc" d="M9 3 A6 6 0 0 1 14.2 6" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">Ready</span></div>
+    <div class="zoom light"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="spin-arc" d="M9 3 A6 6 0 0 1 14.2 6" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+<!-- ============ B ============ -->
+<h2>B · Fill-to-value — ตอนได้ข้อมูลใหม่ <span class="reco">(แนะนำคู่กับ A)</span></h2>
+<p class="desc">
+  พอ % เปลี่ยน วงแหวนวิ่งเติมจากค่าเก่า→ค่าใหม่ด้วย easing (ไม่กระโดด).
+  ผูกกับ "usage" ตรงๆ ที่สุด, เห็นชัดว่าค่าขยับขึ้น/ลง. (ในตัวอย่าง loop 0→66% ไปเรื่อยๆ)
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><circle class="fill-arc" cx="9" cy="9" r="6" fill="none" stroke="var(--amber)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">2h14m</span></div>
+    <div class="zoom dark"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><circle class="fill-arc" cx="9" cy="9" r="6" fill="none" stroke="var(--amber)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">ease-in-out ~0.6s ต่อการเปลี่ยนค่า</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><circle class="fill-arc" cx="9" cy="9" r="6" fill="none" stroke="var(--amber)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">2h14m</span></div>
+    <div class="zoom light"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><circle class="fill-arc" cx="9" cy="9" r="6" fill="none" stroke="var(--amber)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+<!-- ============ C ============ -->
+<h2>C · Breathing pulse — ตอนใกล้ลิมิต (เช่น &gt;90%)</h2>
+<p class="desc">
+  วงแหวน (สีแดง) หายใจเข้า-ออก: opacity + ความหนาเส้นเต้นเบาๆ เป็น "คำเตือน" ที่สังเกตเห็นด้วยหางตา
+  โดยไม่รบกวน. ใช้เฉพาะ threshold สูง ไม่ใช่ตลอดเวลา.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="breathe" d="M9 3 A6 6 0 1 1 4.8 14.2" fill="none" stroke="var(--red)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">12m</span></div>
+    <div class="zoom dark"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="breathe" d="M9 3 A6 6 0 1 1 4.8 14.2" fill="none" stroke="var(--red)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">~1.4s/หายใจ · arc = 92% จริง</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="breathe" d="M9 3 A6 6 0 1 1 4.8 14.2" fill="none" stroke="var(--red)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg><span class="title">12m</span></div>
+    <div class="zoom light"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)"><path class="breathe" d="M9 3 A6 6 0 1 1 4.8 14.2" fill="none" stroke="var(--red)" stroke-width="2.6" stroke-linecap="round"/></g>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+<!-- ============ D ============ -->
+<h2>D · Comet highlight — โหมด idle แบบ subtle (ออปชัน)</h2>
+<p class="desc">
+  วงแหวน usage จริงอยู่นิ่ง แต่มีจุดสว่าง (comet) วิ่งวนรอบ ๆ ให้รู้สึกว่าแอป "ยังมีชีวิต".
+  สวยแต่กินแบตถ้าเปิดตลอด — เหมาะเป็นออปชันเปิด/ปิดมากกว่าค่า default.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)">
+        <path d="M9 3 A6 6 0 0 1 15 9" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle class="comet" cx="9" cy="3" r="1.5" fill="#cfeBd8"/>
+      </g>
+    </svg><span class="title">25%</span></div>
+    <div class="zoom dark"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-d" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)">
+        <path d="M9 3 A6 6 0 0 1 15 9" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle class="comet" cx="9" cy="3" r="1.5" fill="#cfebd8"/>
+      </g>
+    </svg></div>
+    <div class="cap">arc นิ่ง = % จริง · จุดสว่างวน ~1.6s</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light"><svg class="bar" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)">
+        <path d="M9 3 A6 6 0 0 1 15 9" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle class="comet" cx="9" cy="3" r="1.5" fill="#1f6b39"/>
+      </g>
+    </svg><span class="title">25%</span></div>
+    <div class="zoom light"><svg class="big" viewBox="0 0 18 18">
+      <circle class="ring-track-l" cx="9" cy="9" r="6" stroke-width="2.6"/>
+      <g transform="rotate(-90 9 9)">
+        <path d="M9 3 A6 6 0 0 1 15 9" fill="none" stroke="var(--green)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle class="comet" cx="9" cy="3" r="1.5" fill="#1f6b39"/>
+      </g>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+<p class="sub" style="margin-top:40px">
+  <strong>ระบบที่แนะนำ:</strong> A (refresh) + B (เปลี่ยนค่า) เป็นแกนหลัก — ได้ motion ที่
+  "เป็น usage" 100% และหยุดเองเสมอ. เพิ่ม C ตอน &gt;90% เป็นคำเตือน. D เก็บไว้เป็นออปชัน.
+</p>
+
+</body>
+</html>
