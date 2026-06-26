@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ClaudeBar — Crab walking concepts (usage + reset)</title>
+<style>
+  :root{
+    --green:#3DA35D; --amber:#E0A33E; --red:#D9544D;
+    --crab:#E2574C; --crab-d:#B23B32; --crab-l:#F07A6F;
+    --sand:#E8C887; --water:#4FA3C7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+       background:#161618;color:#e9e9eb;padding:30px 26px 70px}
+  h1{font-size:20px;font-weight:680;margin:0 0 4px;letter-spacing:-.2px}
+  .sub{color:#9a9aa0;margin:0 0 26px;max-width:760px}
+  h2{font-size:15px;font-weight:620;margin:34px 0 2px}
+  .desc{color:#9a9aa0;font-size:13px;margin:0 0 14px;max-width:760px}
+  .reco{color:var(--green);font-weight:650}
+  code{background:#26262a;padding:1px 5px;border-radius:4px;font-size:12px}
+
+  .grid{display:flex;flex-wrap:wrap;gap:18px}
+  .tile{border:1px solid #2c2c30;border-radius:12px;overflow:hidden;width:250px;background:#222226}
+  .menubar{height:26px;display:flex;align-items:center;padding:0 9px;gap:7px;font-size:11px;color:#dcdcde}
+  .menubar.light{background:#d7d7d8;color:#1c1c1e}
+  .menubar.dark{background:#2b2b2e}
+  .title{font-variant-numeric:tabular-nums;opacity:.9}
+  .zoom{padding:20px;display:flex;align-items:center;justify-content:center;
+        background:repeating-conic-gradient(#2a2a2e 0 25%,#262629 0 50%) 50%/16px 16px}
+  .zoom.light{background:repeating-conic-gradient(#e9e9ea 0 25%,#e1e1e2 0 50%) 50%/16px 16px}
+  .cap{padding:8px 12px 12px;font-size:11px;color:#8a8a90;border-top:1px solid #2c2c30}
+
+  svg{display:block;shape-rendering:auto}
+  .barIcon{width:30px;height:18px}
+  .barIcon.big{width:150px;height:90px}
+  .sqIcon{width:18px;height:18px}
+  .sqIcon.big{width:120px;height:120px}
+
+  /* ---- shared crab walk ---- */
+  .crab{transform-origin:center;animation:bob .44s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-.5px)}}
+  .legsA{animation:legA .44s steps(1) infinite}
+  .legsB{animation:legB .44s steps(1) infinite}
+  @keyframes legA{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes legB{0%,49%{opacity:0}50%,100%{opacity:1}}
+  .claw{transform-origin:center;animation:wave .88s ease-in-out infinite}
+  @keyframes wave{0%,100%{transform:rotate(0)}50%{transform:rotate(-8deg)}}
+
+  /* design-4 free stroll */
+  .stroll{animation:stroll 3.2s ease-in-out infinite}
+  @keyframes stroll{
+    0%{transform:translateX(0) scaleX(1)}
+    46%{transform:translateX(7px) scaleX(1)}
+    50%{transform:translateX(7px) scaleX(-1)}
+    96%{transform:translateX(0) scaleX(-1)}
+    100%{transform:translateX(0) scaleX(1)}
+  }
+  .ttip{stroke-dasharray:.01 6;animation:tidey 4s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<h1>🦀 ClaudeBar — Crab walking + usage + reset</h1>
+<p class="sub">
+  ปูเดินเป็นพระเอก (ขาสลับ 2 เฟรม + ตัวเด้ง + ก้ามโบก). โจทย์คือผูก 3 อย่าง: ปู(animation) ·
+  usage(รูป) · reset(เวลา). ด้านล่างคือ 4 แนวทางจัดวาง — ซ้าย = ขนาดจริงบน menu bar, ขวา = ซูม.
+</p>
+
+<!-- master crab symbol: origin 0..28 x 0..18 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="crab" viewBox="0 0 28 18">
+    <g class="crab">
+      <!-- legs back (frame B) -->
+      <g class="legsB" stroke="var(--crab-d)" stroke-width="1.1" stroke-linecap="round">
+        <line x1="9" y1="12" x2="6.5" y2="16"/><line x1="11" y1="13" x2="9.5" y2="17"/>
+        <line x1="17" y1="13" x2="18.5" y2="17"/><line x1="19" y1="12" x2="21.5" y2="16"/>
+      </g>
+      <!-- legs front (frame A) -->
+      <g class="legsA" stroke="var(--crab-d)" stroke-width="1.1" stroke-linecap="round">
+        <line x1="9" y1="12" x2="7" y2="17"/><line x1="11" y1="13" x2="11" y2="17.5"/>
+        <line x1="17" y1="13" x2="17" y2="17.5"/><line x1="19" y1="12" x2="21" y2="17"/>
+      </g>
+      <!-- claws -->
+      <g class="claw" style="transform-origin:5px 11px">
+        <line x1="9" y1="11" x2="5" y2="10" stroke="var(--crab-d)" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M5 10 q-3 -1 -3 1 q0 2 3 1 q1.5 -1 0 -2z" fill="var(--crab)" stroke="var(--crab-d)" stroke-width=".7"/>
+      </g>
+      <g class="claw" style="transform-origin:23px 11px;animation-delay:.44s">
+        <line x1="19" y1="11" x2="23" y2="10" stroke="var(--crab-d)" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M23 10 q3 -1 3 1 q0 2 -3 1 q-1.5 -1 0 -2z" fill="var(--crab)" stroke="var(--crab-d)" stroke-width=".7"/>
+      </g>
+      <!-- body -->
+      <ellipse cx="14" cy="11" rx="6.2" ry="4.3" fill="var(--crab)" stroke="var(--crab-d)" stroke-width="1"/>
+      <ellipse cx="14" cy="9.6" rx="5" ry="2.2" fill="var(--crab-l)" opacity=".55"/>
+      <!-- eye stalks -->
+      <line x1="11.5" y1="7.5" x2="11.5" y2="4.5" stroke="var(--crab-d)" stroke-width="1.1"/>
+      <line x1="16.5" y1="7.5" x2="16.5" y2="4.5" stroke="var(--crab-d)" stroke-width="1.1"/>
+      <circle cx="11.5" cy="4" r="1.6" fill="#fff" stroke="var(--crab-d)" stroke-width=".6"/>
+      <circle cx="16.5" cy="4" r="1.6" fill="#fff" stroke="var(--crab-d)" stroke-width=".6"/>
+      <circle cx="11.7" cy="4" r=".7" fill="#222"/><circle cx="16.7" cy="4" r=".7" fill="#222"/>
+    </g>
+  </symbol>
+</defs></svg>
+
+
+<!-- ============ 1 ============ -->
+<h2>1 · ปูเดินบน "ชายหาด progress" — usage = ระยะที่เดินได้ <span class="reco">(แนะนำ)</span></h2>
+<p class="desc">
+  พื้นทราย/น้ำเป็นแถบ progress: ส่วนที่ถมแล้ว = usage%. ปูยืน "เดินอยู่กับที่" ตรงหัวแถบที่ถม
+  (ตำแหน่ง = usage จริง ไม่หลอกตา). เวลารีเซ็ตอยู่ที่ title. ครบ 3 อย่างในไอคอนเดียว + กว้างพอให้ปูชัด.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark">
+      <svg class="barIcon" viewBox="0 0 30 18">
+        <rect x="1" y="14" width="28" height="2.4" rx="1.2" fill="rgba(255,255,255,.22)"/>
+        <rect x="1" y="14" width="17" height="2.4" rx="1.2" fill="var(--amber)"/>
+        <use href="#crab" x="6" y="-1" width="20" height="13"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom dark"><svg class="barIcon big" viewBox="0 0 30 18">
+      <rect x="1" y="14" width="28" height="2.4" rx="1.2" fill="rgba(255,255,255,.22)"/>
+      <rect x="1" y="14" width="17" height="2.4" rx="1.2" fill="var(--amber)"/>
+      <use href="#crab" x="6" y="-1" width="20" height="13"/>
+    </svg></div>
+    <div class="cap">แถบถม 56% · ปู ณ หัวแถบ · title = reset</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light">
+      <svg class="barIcon" viewBox="0 0 30 18">
+        <rect x="1" y="14" width="28" height="2.4" rx="1.2" fill="rgba(0,0,0,.18)"/>
+        <rect x="1" y="14" width="17" height="2.4" rx="1.2" fill="var(--amber)"/>
+        <use href="#crab" x="6" y="-1" width="20" height="13"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom light"><svg class="barIcon big" viewBox="0 0 30 18">
+      <rect x="1" y="14" width="28" height="2.4" rx="1.2" fill="rgba(0,0,0,.18)"/>
+      <rect x="1" y="14" width="17" height="2.4" rx="1.2" fill="var(--amber)"/>
+      <use href="#crab" x="6" y="-1" width="20" height="13"/>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+
+<!-- ============ 2 ============ -->
+<h2>2 · ปูในวงแหวน usage — เก็บ gauge เดิม + ปูตรงกลาง</h2>
+<p class="desc">
+  คงวงแหวน usage แบบเดิม (arc = %) แต่เอาปูเดินไปไว้กลางวง. title = reset.
+  รักษาเอกลักษณ์ ClaudeBar ไว้มากสุด แต่พื้นที่กลางวงเล็ก ปูจะจิ๋ว (เห็นชัดเฉพาะตอนซูม).
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark">
+      <svg class="sqIcon" viewBox="0 0 18 18">
+        <circle cx="9" cy="9" r="6" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.2"/>
+        <g transform="rotate(-90 9 9)"><path d="M9 3 A6 6 0 0 1 14.6 11.5" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linecap="round"/></g>
+        <use href="#crab" x="2.5" y="3" width="13" height="8.5"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom dark"><svg class="sqIcon big" viewBox="0 0 18 18">
+      <circle cx="9" cy="9" r="6" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.2"/>
+      <g transform="rotate(-90 9 9)"><path d="M9 3 A6 6 0 0 1 14.6 11.5" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linecap="round"/></g>
+      <use href="#crab" x="2.5" y="3" width="13" height="8.5"/>
+    </svg></div>
+    <div class="cap">ring = 35% · ปูกลางวง · title = reset</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light">
+      <svg class="sqIcon" viewBox="0 0 18 18">
+        <circle cx="9" cy="9" r="6" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="2.2"/>
+        <g transform="rotate(-90 9 9)"><path d="M9 3 A6 6 0 0 1 14.6 11.5" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linecap="round"/></g>
+        <use href="#crab" x="2.5" y="3" width="13" height="8.5"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom light"><svg class="sqIcon big" viewBox="0 0 18 18">
+      <circle cx="9" cy="9" r="6" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="2.2"/>
+      <g transform="rotate(-90 9 9)"><path d="M9 3 A6 6 0 0 1 14.6 11.5" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linecap="round"/></g>
+      <use href="#crab" x="2.5" y="3" width="13" height="8.5"/>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+
+<!-- ============ 3 ============ -->
+<h2>3 · ปูบนระดับน้ำขึ้น — usage = ระดับน้ำท่วม</h2>
+<p class="desc">
+  ธีมทะเล: น้ำขึ้นจากล่าง สูง = usage% (เขียว→เหลือง→แดงตาม level). ปูเดินอยู่บนผิวน้ำ.
+  title = reset. usage อ่านเป็น "ความสูง" เห็นภาพรวมเร็ว แต่ความละเอียด % สู้แถบ/วงแหวนไม่ได้.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark">
+      <svg class="sqIcon" viewBox="0 0 18 18">
+        <clipPath id="cc"><circle cx="9" cy="9" r="8"/></clipPath>
+        <g clip-path="url(#cc)">
+          <rect x="0" y="0" width="18" height="18" fill="rgba(255,255,255,.06)"/>
+          <rect x="0" y="9" width="18" height="9" fill="var(--water)" opacity=".85"/>
+        </g>
+        <circle cx="9" cy="9" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>
+        <use href="#crab" x="2.5" y="3.5" width="13" height="8.5"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom dark"><svg class="sqIcon big" viewBox="0 0 18 18">
+      <clipPath id="cc2"><circle cx="9" cy="9" r="8"/></clipPath>
+      <g clip-path="url(#cc2)">
+        <rect x="0" y="0" width="18" height="18" fill="rgba(255,255,255,.06)"/>
+        <rect x="0" y="9" width="18" height="9" fill="var(--water)" opacity=".85"/>
+      </g>
+      <circle cx="9" cy="9" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>
+      <use href="#crab" x="2.5" y="3.5" width="13" height="8.5"/>
+    </svg></div>
+    <div class="cap">น้ำ = 50% · ปูบนผิวน้ำ · title = reset</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light">
+      <svg class="sqIcon" viewBox="0 0 18 18">
+        <clipPath id="cc3"><circle cx="9" cy="9" r="8"/></clipPath>
+        <g clip-path="url(#cc3)">
+          <rect x="0" y="0" width="18" height="18" fill="rgba(0,0,0,.05)"/>
+          <rect x="0" y="9" width="18" height="9" fill="var(--water)" opacity=".8"/>
+        </g>
+        <circle cx="9" cy="9" r="8" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="1"/>
+        <use href="#crab" x="2.5" y="3.5" width="13" height="8.5"/>
+      </svg><span class="title">2h14m</span>
+    </div>
+    <div class="zoom light"><svg class="sqIcon big" viewBox="0 0 18 18">
+      <clipPath id="cc4"><circle cx="9" cy="9" r="8"/></clipPath>
+      <g clip-path="url(#cc4)">
+        <rect x="0" y="0" width="18" height="18" fill="rgba(0,0,0,.05)"/>
+        <rect x="0" y="9" width="18" height="9" fill="var(--water)" opacity=".8"/>
+      </g>
+      <circle cx="9" cy="9" r="8" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="1"/>
+      <use href="#crab" x="2.5" y="3.5" width="13" height="8.5"/>
+    </svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+
+<!-- ============ 4 ============ -->
+<h2>4 · ปูเดินอิสระ + ตัวเลขใน title — อ่านง่ายสุด</h2>
+<p class="desc">
+  ปูเป็นไอคอนล้วน เดินไป-กลับอย่างมีชีวิต (ไม่ผูกตำแหน่งกับค่า). usage + reset อยู่ใน text
+  เช่น <code>56% · 2h14m</code>. ปูได้เป็น "ปูเดิน" เต็มตัวที่สุด อ่านเลขชัดสุด แต่ usage ไม่เป็นภาพ.
+</p>
+<div class="grid">
+  <div class="tile">
+    <div class="menubar dark">
+      <svg class="sqIcon" viewBox="0 0 18 18"><use class="stroll" href="#crab" x="0" y="2.5" width="18" height="12"/></svg>
+      <span class="title">56% · 2h14m</span>
+    </div>
+    <div class="zoom dark"><svg class="sqIcon big" viewBox="0 0 18 18"><use class="stroll" href="#crab" x="0" y="2.5" width="18" height="12"/></svg></div>
+    <div class="cap">ปูเดินไป-กลับ · usage+reset ใน text</div>
+  </div>
+  <div class="tile">
+    <div class="menubar light">
+      <svg class="sqIcon" viewBox="0 0 18 18"><use class="stroll" href="#crab" x="0" y="2.5" width="18" height="12"/></svg>
+      <span class="title">56% · 2h14m</span>
+    </div>
+    <div class="zoom light"><svg class="sqIcon big" viewBox="0 0 18 18"><use class="stroll" href="#crab" x="0" y="2.5" width="18" height="12"/></svg></div>
+    <div class="cap">light menu bar</div>
+  </div>
+</div>
+
+<p class="sub" style="margin-top:42px">
+  <strong>คำแนะนำ:</strong> แบบ <strong>1 (ปูบนแถบ progress)</strong> ผูกครบ 3 อย่างได้ลงตัวสุด —
+  usage เป็นแถบที่อ่านแม่น, ปูเดินตรงหัวแถบเป็นตัวเล่น, reset อยู่ใน title. ถ้าอยากรักษาวงแหวนเดิมไว้เลือกแบบ 2.
+  ถ้าเน้นอ่านเลขชัดเลือกแบบ 4. สีปูคงแดงเสมอ ส่วนแถบ/วงแหวน/น้ำ เปลี่ยนสีตาม level (เขียว/เหลือง/แดง).
+</p>
+
+</body>
+</html>
