@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +14,7 @@ import '../ui/format.dart';
 import '../ui/tokens.dart';
 import 'popover_window.dart';
 import 'tray_glyph.dart';
+import 'updater.dart';
 
 /// Drives the menu-bar status item: a ring gauge for the usage % with the
 /// reset countdown as its title, plus a context menu, reacting to changes in
@@ -62,9 +62,10 @@ class TrayController with TrayListener {
     _recoveryChannel.setMethodCallHandler(_onRecoveryCall);
     await _rebuild();
 
-    // Re-render whenever usage or the chosen metric changes.
+    // Re-render whenever usage, the chosen metric, or a pending update changes.
     container.listen(usageControllerProvider, (_, __) => _rebuild(), fireImmediately: false);
     container.listen(settingsProvider, (_, __) => _rebuild(), fireImmediately: false);
+    container.listen(pendingUpdateProvider, (_, __) => _rebuild(), fireImmediately: false);
 
     // The title carries a minute-granular reset countdown, so tick it along
     // between refreshes (design mockup variant G: ring + "2h14m"). The tick
@@ -251,7 +252,18 @@ class TrayController with TrayListener {
     items.add(MenuItem.separator());
     items.add(MenuItem(key: 'open', label: 'Open ClaudeBar'));
     items.add(MenuItem(key: 'refresh', label: 'Refresh'));
-    items.add(MenuItem(key: 'check-updates', label: 'Check for Updates…'));
+    // A scheduled Sparkle check that found an update never pops UI on its own
+    // (gentle reminders — see UpdaterChannel); it surfaces here instead, and
+    // the click brings the already-found update into focus.
+    final pendingUpdate = container.read(pendingUpdateProvider);
+    if (pendingUpdate != null) {
+      items.add(MenuItem(
+        key: 'install-update',
+        label: 'Update Available ($pendingUpdate)…',
+      ));
+    } else {
+      items.add(MenuItem(key: 'check-updates', label: 'Check for Updates…'));
+    }
     items.add(MenuItem.separator());
     items.add(MenuItem(key: 'quit', label: 'Quit ClaudeBar'));
 
@@ -285,9 +297,12 @@ class TrayController with TrayListener {
         break;
       case 'check-updates':
         // User-initiated: Sparkle activates the app so its dialog surfaces even
-        // though ClaudeBar is an LSUIElement (menu-bar) app. setFeedURL was set
-        // once in main(); calling checkForUpdates() before that would no-op.
-        autoUpdater.checkForUpdates();
+        // though ClaudeBar is an LSUIElement (menu-bar) app — fine here, the
+        // user asked. Feed URL and start() ran in main() before the tray exists.
+        AppUpdater.checkForUpdates();
+        break;
+      case 'install-update':
+        AppUpdater.showPendingUpdate();
         break;
       case 'quit':
         _quit();

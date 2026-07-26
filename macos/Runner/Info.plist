@@ -45,8 +45,18 @@
 	<!-- Sparkle EdDSA public key. The matching PRIVATE key lives in the login
 	     Keychain (search "sparkle"); back it up — it cannot be regenerated.
 	     See the release skill for the export/import runbook. The feed URL is set
-	     at runtime via autoUpdater.setFeedURL() in lib/main.dart (no SUFeedURL). -->
+	     at runtime via AppUpdater.setFeedURL() in lib/main.dart (no SUFeedURL). -->
 	<key>SUPublicEDKey</key>
 	<string>OQCMVAs9l5UXNdwz3Fd2GBxig2oZn81BCdpZWt2/3Mo=</string>
+	<!-- Automatic update checks are on by policy — this key retires Sparkle's
+	     "check for updates automatically?" permission prompt. Without it Sparkle
+	     re-asks on EVERY launch until answered, and for a background LSUIElement
+	     app that prompt calls NSApp.activateIgnoringOtherApps: it yanked focus
+	     from whatever app the user was typing in, which is what flashed the
+	     macOS input-source capsule at their caret (the "blue language box" bug).
+	     Scheduled finds themselves never show UI either — UpdaterChannel's
+	     gentle reminders route them to a tray-menu item instead. -->
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

@@ -29,9 +29,12 @@ flutter_macos_podfile_setup
 target 'Runner' do
   use_frameworks!
 
-  # auto_updater bundles Sparkle but does not pin a version. Pin it here so
-  # release builds are reproducible. If you ever bump the MAJOR version, re-check
-  # the nested-helper paths in scripts/release_dmg.sh (Versions/*/Autoupdate etc).
+  # Sparkle is a direct dependency of Runner: UpdaterChannel in
+  # macos/Runner/MainFlutterWindow.swift drives it natively (gentle reminders;
+  # the auto_updater plugin was dropped because its stock setup could steal
+  # focus from the background). Keep the version pinned so release builds are
+  # reproducible. If you ever bump the MAJOR version, re-check the
+  # nested-helper paths in scripts/release_dmg.sh (Versions/*/Autoupdate etc).
   pod 'Sparkle', '~> 2.5'
 
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))

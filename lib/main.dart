@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
@@ -11,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app/measure_size.dart';
 import 'app/popover_window.dart';
 import 'app/tray_controller.dart';
+import 'app/updater.dart';
 import 'settings/prefs.dart';
 import 'state/usage_controller.dart';
 import 'ui/popover_panel.dart';
@@ -23,29 +23,31 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  // In-app auto-update (Sparkle via auto_updater). setFeedURL must run before
-  // any update check, and points at the stable or beta appcast per the user's
-  // opt-in (Settings → "Receive beta updates"). We don't force a check at
-  // launch — Sparkle runs its own scheduled background checks (daily; minimum
-  // 3600s, 0 disables) — while the tray's "Check for Updates…" item lets the
-  // user check on demand. A user-initiated check activates the app so Sparkle's
-  // dialog comes to the front, which matters for an LSUIElement (menu-bar) app
-  // with no key window.
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
+  );
+
+  // In-app auto-update (Sparkle, driven natively by UpdaterChannel with gentle
+  // reminders — see MainFlutterWindow.swift for why the auto_updater plugin
+  // was dropped). Configure before start(): the stable or beta appcast per the
+  // user's opt-in (Settings → "Receive beta updates") and daily scheduled
+  // checks. A scheduled find never shows UI or takes focus; it only lights up
+  // the tray's "Update Available…" item (pendingUpdateProvider, wired by
+  // AppUpdater.init). The tray's "Check for Updates…" stays a user-initiated,
+  // focused Sparkle flow.
+  AppUpdater.init(container);
   final beta = prefs.getBool(kBetaUpdatesPref) ?? false;
-  await autoUpdater.setFeedURL(appcastUrlFor(beta));
-  await autoUpdater.setScheduledCheckInterval(86400);
+  await AppUpdater.setFeedURL(appcastUrlFor(beta));
+  await AppUpdater.setScheduledCheckInterval(86400);
+  await AppUpdater.start();
 
   // Register the login-item handle so the Settings toggle can enable/disable
   // "Open at login" (spec §10, Phase 2).
   launchAtStartup.setup(
     appName: 'ClaudeBar',
     appPath: Platform.resolvedExecutable,
-  );
-
-  final container = ProviderContainer(
-    overrides: [
-      sharedPreferencesProvider.overrideWithValue(prefs),
-    ],
   );
 
   _popover = PopoverWindow();

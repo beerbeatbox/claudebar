@@ -1,7 +1,8 @@
-import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../app/updater.dart';
 
 /// Which window the menu-bar number reflects (spec §2 — user-switchable).
 enum MenuBarMetric { session, weekly }
@@ -112,7 +113,7 @@ class SettingsController extends Notifier<Settings> {
   Future<void> setBetaUpdates(bool value) async {
     state = state.copyWith(betaUpdates: value);
     await _prefs.setBool(_kBeta, value);
-    await autoUpdater.setFeedURL(appcastUrlFor(value));
+    await AppUpdater.setFeedURL(appcastUrlFor(value));
   }
 }
 

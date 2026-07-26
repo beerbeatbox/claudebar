@@ -71,7 +71,7 @@ build_sparkle_zip() {
     fi
   else
     echo "note: $SIGN_UPDATE not found. Run 'pod install' (macos/), then:" >&2
-    echo "      dart run auto_updater:sign_update \"$ZIP_PATH\"" >&2
+    echo "      $SIGN_UPDATE \"$ZIP_PATH\"" >&2
   fi
 }
 

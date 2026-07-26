@@ -22,8 +22,10 @@ dependencies:
   screen_retriever: ^0.2.0
   launch_at_startup: ^0.5.1
 
-  # In-app auto-update (wraps Sparkle 2.x on macOS)
-  auto_updater: ^1.0.0
+  # In-app auto-update: Sparkle is linked via the macos Podfile and driven
+  # natively by UpdaterChannel (macos/Runner/MainFlutterWindow.swift) with
+  # gentle reminders; the auto_updater plugin's stock setup could steal focus
+  # from the background (the phantom input-source-capsule bug).
 
   # Persistence, formatting
   shared_preferences: ^2.3.2

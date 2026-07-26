@@ -10,8 +10,9 @@ verifications. The whole flow was validated on the v1.2.0 release (2026-06-12).
 
 ## Sparkle auto-update signing key (CRITICAL — read before touching releases)
 
-ClaudeBar updates itself via Sparkle (the `auto_updater` package). The entire
-chain hangs on ONE EdDSA private key:
+ClaudeBar updates itself via Sparkle (linked in `macos/Podfile`, driven
+natively by `UpdaterChannel` in `macos/Runner/MainFlutterWindow.swift`). The
+entire chain hangs on ONE EdDSA private key:
 
 - Its public half (`SUPublicEDKey`) is baked into every shipped build's
   `macos/Runner/Info.plist`. Sparkle in users' already-installed copies only
@@ -29,7 +30,7 @@ The Sparkle CLI tools live at `macos/Pods/Sparkle/bin/*` after `pod install`.
 ```bash
 fvm flutter pub get
 (cd macos && pod install)                       # provides Pods/Sparkle/bin/*
-dart run auto_updater:generate_keys             # prints the base64 public key
+macos/Pods/Sparkle/bin/generate_keys            # prints the base64 public key
 # Paste it into macos/Runner/Info.plist:
 #   <key>SUPublicEDKey</key><string>…</string>
 ```
@@ -47,7 +48,7 @@ macos/Pods/Sparkle/bin/generate_keys -x ~/claudebar-sparkle-private.key
 macos/Pods/Sparkle/bin/generate_keys -f ~/claudebar-sparkle-private.key
 # Verify: with a key present, re-running generate_keys just reprints the public
 # key — it must equal SUPublicEDKey in Info.plist.
-dart run auto_updater:generate_keys
+macos/Pods/Sparkle/bin/generate_keys
 ```
 
 ### Worst case: key gone AND no backup
@@ -179,7 +180,7 @@ git push
 ```
 
 Lost the `edSignature`/`length`? Regenerate without rebuilding:
-`dart run auto_updater:sign_update build/dist/ClaudeBar-X.Y.Z.zip`.
+`macos/Pods/Sparkle/bin/sign_update build/dist/ClaudeBar-X.Y.Z.zip`.
 
 ## 6. Verify and report
 

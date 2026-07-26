@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import Sparkle
 import os
 
 /// Native frosted-glass backdrop for the popover card, like a real macOS menu.
@@ -229,6 +230,12 @@ class MainFlutterWindow: NSPanel {
       with: flutterViewController.registrar(forPlugin: "TrayRecoveryChannel")
     )
 
+    // Sparkle auto-update, driven directly with gentle reminders so a
+    // background check can never steal focus (see UpdaterChannel).
+    UpdaterChannel.register(
+      with: flutterViewController.registrar(forPlugin: "UpdaterChannel")
+    )
+
     super.awakeFromNib()
   }
 }
@@ -403,6 +410,144 @@ enum TrayRecoveryChannel {
     os_log("recovery trigger: %{public}@ (force=%{public}@)",
            log: log, type: .info, source, force ? "true" : "false")
     channel?.invokeMethod("recover", arguments: ["force": force])
+  }
+}
+
+/// In-app auto-update: Sparkle driven directly, with gentle reminders.
+/// Replaces the auto_updater plugin, whose stock setup was the root cause of
+/// the phantom input-source indicator (the blue language capsule flashing at
+/// the text caret of OTHER apps while ClaudeBar ran in the background).
+///
+/// For a background (LSUIElement) agent app, Sparkle's standard user driver
+/// takes focus on its own initiative:
+///   • The "check for updates automatically?" permission prompt calls
+///     NSApp.activateIgnoringOtherApps — and with no SUEnableAutomaticChecks
+///     key it re-arms on EVERY launch until the dialog is answered (the
+///     plugin never set the key and its Dart API had no way to).
+///   • A scheduled check that finds an update activates the app when the
+///     result lands near launch, and otherwise orders a key-able alert window
+///     in silently — invisible from a fullscreen Space, where it lingers and
+///     keeps yanking key status around.
+/// Every such steal deactivates the app the user is typing in; when focus
+/// returns, macOS (Sonoma+) re-asserts the input source at the caret — that
+/// re-assert is exactly what draws the capsule, with no language change.
+///
+/// The fix, per Sparkle's gentle-reminders protocol:
+///   • SUEnableAutomaticChecks=true in Info.plist retires the permission
+///     prompt for good (checks were always meant to be on; the interval is
+///     configured from Dart).
+///   • standardUserDriverShouldHandleShowingScheduledUpdate returns false, so
+///     a scheduled find NEVER shows UI or activates the app by itself — Dart
+///     is told instead and lights up an "Update Available…" tray-menu item.
+///   • Only user-initiated actions (that menu item, or "Check for Updates…" —
+///     both via checkForUpdates) bring up Sparkle's UI, and those may
+///     activate the app — the user just asked for it.
+final class UpdaterChannel: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+  static let channelName = "claudebar/updater"
+
+  /// Sparkle holds its delegates weakly; this keeps the channel (and with it
+  /// the updater) alive for the app's lifetime.
+  static var shared: UpdaterChannel?
+
+  static let log = OSLog(subsystem: "one.beatbox.claudeUsageBar", category: "updater")
+
+  private let channel: FlutterMethodChannel
+  private var userDriver: SPUStandardUserDriver!
+  private var updater: SPUUpdater!
+
+  /// Appcast URL pushed from Dart (stable or beta per the user's opt-in);
+  /// Sparkle asks for it via feedURLString(for:) at check time.
+  private var feedURL: URL?
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    shared = UpdaterChannel(messenger: registrar.messenger)
+  }
+
+  private init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
+    super.init()
+
+    userDriver = SPUStandardUserDriver(hostBundle: Bundle.main, delegate: self)
+    updater = SPUUpdater(
+      hostBundle: Bundle.main,
+      applicationBundle: Bundle.main,
+      userDriver: userDriver,
+      delegate: self
+    )
+
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      switch call.method {
+      case "setFeedURL":
+        if let urlString = call.arguments as? String {
+          self.feedURL = URL(string: urlString)
+        }
+        result(true)
+      case "setScheduledCheckInterval":
+        if let seconds = call.arguments as? Int {
+          self.updater.updateCheckInterval = TimeInterval(seconds)
+        }
+        result(true)
+      // Deterministic start, invoked from Dart only after the feed URL and
+      // interval are set — the plugin start()ed at registration instead,
+      // racing its own configuration.
+      case "start":
+        self.updater.clearFeedURLFromUserDefaults()
+        do {
+          try self.updater.start()
+        } catch {
+          os_log("sparkle start failed: %{public}@",
+                 log: Self.log, type: .error, String(describing: error))
+        }
+        result(true)
+      // User-initiated ("Check for Updates…" or the "Update Available…" item):
+      // Sparkle shows its UI in focus, activating the app — expected, the user
+      // asked. When a gently-deferred update session is already pending,
+      // SPUUpdater routes this same call to the user driver's (internal)
+      // showUpdateInFocus, bringing that update's alert up instead of starting
+      // a new check.
+      case "checkForUpdates":
+        self.updater.checkForUpdates()
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  // ---- SPUUpdaterDelegate ----
+
+  func feedURLString(for updater: SPUUpdater) -> String? {
+    return feedURL?.absoluteString
+  }
+
+  // ---- SPUStandardUserDriverDelegate (gentle reminders) ----
+
+  var supportsGentleScheduledUpdateReminders: Bool { true }
+
+  /// Never let the standard driver pop scheduled-update UI on its own — even
+  /// in the "immediate focus" near-launch case, which for this login-item
+  /// agent app meant an activation right as the user starts working.
+  func standardUserDriverShouldHandleShowingScheduledUpdate(
+    _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
+  ) -> Bool {
+    return false
+  }
+
+  func standardUserDriverWillHandleShowingUpdate(
+    _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
+  ) {
+    guard !handleShowingUpdate else { return }
+    os_log("scheduled update %{public}@ found; deferring to tray menu",
+           log: Self.log, type: .info, update.displayVersionString)
+    channel.invokeMethod("updateAvailable", arguments: update.displayVersionString)
+  }
+
+  func standardUserDriverWillFinishUpdateSession() {
+    channel.invokeMethod("updateSessionEnded", arguments: nil)
   }
 }
 
