@@ -48,6 +48,20 @@
     <description>Most recent ClaudeBar updates (beta channel).</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.8-beta.21</title>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>1.5.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**The blue input-source (language) capsule no longer flashes at your text cursor while ClaudeBar runs** — background update checks could quietly steal focus from the app you were typing in; they no longer can.</li><li>Background update checks no longer pop windows on their own: when an update is found, an &quot;Update Available (x.y.z)…&quot; item appears in the menu-bar menu — click it to install. &quot;Check for Updates…&quot; works as before.</li><li>The plan badge (MAX / TEAM / …) now updates when you switch Claude Code accounts — it follows on the next refresh, no restart needed.</li></ul> ]]></description>
+      <pubDate>Sun, 26 Jul 2026 05:50:32 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.5.8-beta.21/ClaudeBar-1.5.8.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="0stAwJup1Xjk5UbAtd1tbHpQGMlh2ATMt31qbTkvJUwo/GiK1aOuQd9wAFVnbv/E70wJXqOsLXDFOKUPSt6nBA=="
+        length="17328883"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.7</title>
       <sparkle:version>20</sparkle:version>
       <sparkle:shortVersionString>1.5.7</sparkle:shortVersionString>
