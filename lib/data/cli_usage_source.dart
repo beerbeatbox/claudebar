@@ -42,8 +42,11 @@ class CliUsageSource {
   /// searched and absent (so the candidates are only walked once per run).
   String? _binary;
 
-  /// Plan label from `claude auth status` — changes essentially never, so
-  /// one probe per app run is enough.
+  /// Last good plan label from `claude auth status`. Only a fallback for the
+  /// odd probe hiccup — the label is re-probed on every fetch, because the
+  /// user can switch Claude Code accounts mid-run (e.g. Max ↔ Team) and a
+  /// run-long cache left the badge showing the previous account's plan until
+  /// ClaudeBar was restarted.
   String? _plan;
 
   /// `/usage` answers in ~0.5s normally, but the CLI can stall behind a
@@ -344,13 +347,14 @@ class CliUsageSource {
   }
 
   /// Plan badge text via `claude auth status --json` (subscriptionType),
-  /// e.g. "max" → "Max". Cached after the first success.
+  /// e.g. "max" → "Max". Probed on every fetch so an account switch shows up
+  /// on the next refresh — the CLI answers it locally (no API call), so the
+  /// extra spawn costs ~half a second alongside the /usage probe itself. On a
+  /// failed probe the last good label is kept ("Claude" before the first).
   Future<String> _planLabel() async {
-    final cached = _plan;
-    if (cached != null) return cached;
     final out = await _run(['auth', 'status', '--json']);
     final sub = out == null ? null : decodeEnvelope(out)?['subscriptionType'];
-    if (sub is! String || sub.isEmpty) return 'Claude';
+    if (sub is! String || sub.isEmpty) return _plan ?? 'Claude';
     return _plan = sub[0].toUpperCase() + sub.substring(1).toLowerCase();
   }
 
