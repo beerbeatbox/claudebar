@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.0</title>
+      <sparkle:version>22</sparkle:version>
+      <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**Per-model weekly usage now shows every model your plan reports — including Fable.** The popover and menu previously knew only Opus and Sonnet; rows for any other model were silently dropped. Each per-model line from Claude Code now becomes its own row, named and ordered exactly as the CLI reports it — so a newly added model shows up on the next refresh, with no app update needed.</li><li>Plans without a given model bucket are unchanged: no data means no row, same as before.</li></ul> ]]></description>
+      <pubDate>Mon, 27 Jul 2026 07:39:42 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.6.0/ClaudeBar-1.6.0.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="ooPiamrCsUNsxLheF4/J1tUdEMBZEnQZLtX+8nBiG1qeoOcUAibC6+uOoTYvB1Po63sNU8YlqHhZThtmiscIDg=="
+        length="17330212"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.8</title>
       <sparkle:version>21</sparkle:version>
       <sparkle:shortVersionString>1.5.8</sparkle:shortVersionString>
