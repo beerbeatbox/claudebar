@@ -26,9 +26,10 @@ void main() {
       expect(snap.session.label, 'Session · 5h');
       expect(snap.weekly.percent, closeTo(28, 0.01));
       expect(snap.weekly.resetsAt, DateTime(2026, 6, 14, 1, 59));
-      expect(snap.sonnet!.percent, closeTo(0, 0.01));
-      expect(snap.sonnet!.resetsAt, isNull);
-      expect(snap.opus, isNull);
+      expect(snap.models, hasLength(1));
+      expect(snap.models.single.label, 'Sonnet · weekly');
+      expect(snap.models.single.percent, closeTo(0, 0.01));
+      expect(snap.models.single.resetsAt, isNull);
       expect(snap.plan, 'Max');
       expect(snap.fetchedAt, now);
     });
@@ -40,8 +41,35 @@ void main() {
       final snap = CliUsageSource.parseUsageText(text, plan: 'Max', now: now);
       expect(snap!.session.resetsAt, DateTime(2026, 6, 12, 23, 30));
       expect(snap.weekly.resetsAt, isNull);
-      expect(snap.opus!.percent, closeTo(7.5, 0.01));
-      expect(snap.sonnet, isNull);
+      expect(snap.models.single.label, 'Opus · weekly');
+      expect(snap.models.single.percent, closeTo(7.5, 0.01));
+    });
+
+    test('surfaces every per-model line, in CLI order, without an allowlist',
+        () {
+      // A model ClaudeBar has never heard of must still get a row — that is
+      // the point of the generic parser (no app update per new model).
+      const text = 'Current session: 12% used\n'
+          'Current week (all models): 40% used\n'
+          'Current week (Opus only): 7.5% used\n'
+          'Current week (Sonnet only): 3% used\n'
+          'Current week (Fable only): 14% used';
+      final snap = CliUsageSource.parseUsageText(text, plan: 'Max', now: now);
+      expect(
+        snap!.models.map((w) => w.label),
+        ['Opus · weekly', 'Sonnet · weekly', 'Fable · weekly'],
+      );
+      expect(snap.models[2].percent, closeTo(14, 0.01));
+    });
+
+    test('a model name containing "all" is not mistaken for the weekly total',
+        () {
+      const text = 'Current session: 1% used\n'
+          'Current week (all models): 2% used\n'
+          'Current week (Small only): 3% used';
+      final snap = CliUsageSource.parseUsageText(text, plan: 'Max', now: now);
+      expect(snap!.weekly.percent, closeTo(2, 0.01));
+      expect(snap.models.single.label, 'Small · weekly');
     });
 
     test('rolls the year over a December→January reset', () {

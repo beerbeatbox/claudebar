@@ -235,8 +235,9 @@ class TrayController with TrayListener {
     if (snapshot != null) {
       items.add(_readonly(_windowLine(snapshot.session)));
       items.add(_readonly(_windowLine(snapshot.weekly)));
-      if (snapshot.opus != null) items.add(_readonly(_windowLine(snapshot.opus!)));
-      if (snapshot.sonnet != null) items.add(_readonly(_windowLine(snapshot.sonnet!)));
+      for (final window in snapshot.models) {
+        items.add(_readonly(_windowLine(window)));
+      }
       items.add(MenuItem.separator());
       items.add(_readonly('Plan: ${snapshot.plan}'));
       if (snapshot.stale) {

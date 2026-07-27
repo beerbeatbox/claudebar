@@ -5,10 +5,12 @@ class UsageSnapshot {
   final UsageWindow session;
   final UsageWindow weekly;
 
-  /// Per-model weekly windows — null when the payload omits them (UI hides
-  /// those rows; not an error).
-  final UsageWindow? sonnet;
-  final UsageWindow? opus;
+  /// Per-model weekly windows (`Current week (<Model> only): …`), in the
+  /// order the CLI printed them. Parsed generically so a plan's models —
+  /// Opus, Sonnet, Fable, whatever ships next — all surface without a code
+  /// change; empty when the payload has none (UI hides the section; not an
+  /// error).
+  final List<UsageWindow> models;
 
   /// Plan label from `claude auth status`, e.g. "Max", "Pro".
   final String plan;
@@ -21,8 +23,7 @@ class UsageSnapshot {
   const UsageSnapshot({
     required this.session,
     required this.weekly,
-    this.sonnet,
-    this.opus,
+    this.models = const [],
     required this.plan,
     required this.fetchedAt,
     this.stale = false,
@@ -32,8 +33,7 @@ class UsageSnapshot {
     return UsageSnapshot(
       session: session,
       weekly: weekly,
-      sonnet: sonnet,
-      opus: opus,
+      models: models,
       plan: plan,
       fetchedAt: fetchedAt ?? this.fetchedAt,
       stale: stale ?? this.stale,

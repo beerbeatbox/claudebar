@@ -148,10 +148,9 @@ class _UsageView extends StatelessWidget {
             stale: snapshot.stale,
             fetchedAt: snapshot.fetchedAt,
           ),
-          if (snapshot.opus != null || snapshot.sonnet != null) ...[
+          if (snapshot.models.isNotEmpty) ...[
             Divider(color: t.hairline, height: 28, thickness: 0.5),
-            if (snapshot.opus != null) MiniMeterRow(window: snapshot.opus!),
-            if (snapshot.sonnet != null) MiniMeterRow(window: snapshot.sonnet!),
+            for (final window in snapshot.models) MiniMeterRow(window: window),
           ],
         ],
 

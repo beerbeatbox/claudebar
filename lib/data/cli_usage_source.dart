@@ -153,9 +153,12 @@ class CliUsageSource {
     required String plan,
     required DateTime now,
   }) {
-    UsageWindow? session, weekly, opus, sonnet;
+    UsageWindow? session, weekly;
+    // Keyed by label so a duplicated line updates in place; insertion order
+    // preserves the CLI's own print order for the UI.
+    final models = <String, UsageWindow>{};
     for (final m in _lineRe.allMatches(text)) {
-      final qualifier = m.group(2)?.toLowerCase();
+      final qualifier = m.group(2)?.trim();
       final percent =
           (double.tryParse(m.group(3)!) ?? 0).clamp(0, 100).toDouble();
       final resetsAt = _parseReset(m.group(4), now);
@@ -163,29 +166,39 @@ class CliUsageSource {
       UsageWindow window(String label) =>
           UsageWindow(percent: percent, resetsAt: resetsAt, label: label);
 
-      // Labels mirror usage_api.dart so the UI renders identically
-      // regardless of which source produced the snapshot.
       if (m.group(1) == 'session') {
         session = window('Session · 5h');
       } else if (qualifier == null) {
         continue;
-      } else if (qualifier.contains('all')) {
+      } else if (qualifier.toLowerCase() == 'all models') {
+        // Matched exactly (not `contains('all')`) so a model whose name
+        // happens to contain "all" can never swallow the weekly total.
         weekly = window('Weekly · 7d');
-      } else if (qualifier.contains('opus')) {
-        opus = window('Opus · weekly');
-      } else if (qualifier.contains('sonnet')) {
-        sonnet = window('Sonnet · weekly');
+      } else {
+        // Any other qualifier is a per-model window — `Opus only`,
+        // `Sonnet only`, `Fable only`, whatever the CLI prints next. The
+        // label keeps the CLI's own model name, so new models surface
+        // without a ClaudeBar update.
+        final label = '${_stripOnly(qualifier)} · weekly';
+        models[label] = window(label);
       }
     }
     if (session == null || weekly == null) return null;
     return UsageSnapshot(
       session: session,
       weekly: weekly,
-      opus: opus,
-      sonnet: sonnet,
+      models: List.unmodifiable(models.values),
       plan: plan,
       fetchedAt: now,
     );
+  }
+
+  /// `Opus only` → `Opus`; leaves a qualifier without the suffix untouched.
+  static String _stripOnly(String qualifier) {
+    const suffix = ' only';
+    return qualifier.toLowerCase().endsWith(suffix)
+        ? qualifier.substring(0, qualifier.length - suffix.length).trimRight()
+        : qualifier;
   }
 
   static final _resetRe = RegExp(

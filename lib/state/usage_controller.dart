@@ -220,8 +220,11 @@ class UsageController extends Notifier<UsageState> {
         resetsAt: now.add(const Duration(days: 4)),
         label: 'Weekly',
       ),
-      opus: const UsageWindow(percent: 18, label: 'Opus · weekly'),
-      sonnet: const UsageWindow(percent: 55, label: 'Sonnet · weekly'),
+      models: const [
+        UsageWindow(percent: 18, label: 'Opus · weekly'),
+        UsageWindow(percent: 55, label: 'Sonnet · weekly'),
+        UsageWindow(percent: 7, label: 'Fable · weekly'),
+      ],
       plan: 'Max',
       fetchedAt: now,
     );
