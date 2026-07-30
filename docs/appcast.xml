@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.1</title>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>1.6.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**Fixes a cause of the phantom blue language capsule popping up while you type in other apps.** Opening the popover while a fullscreen app was active made the invisible popover grab keyboard focus (it could not join the fullscreen Space): keys briefly went dead and macOS flashed the input-source badge with no visible cause. The popover now appears properly over fullscreen apps and never holds focus off-screen.</li><li>Adds a focus diagnostic trail to Console (subsystem &quot;one.beatbox.claudeUsageBar&quot;, category &quot;focus&quot;): key-window changes, app activations, and every system input-source switch are logged in release builds, so any remaining capsule sighting can be traced to its exact trigger.</li></ul> ]]></description>
+      <pubDate>Thu, 30 Jul 2026 16:20:24 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.6.1/ClaudeBar-1.6.1.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="Ay2alH7dv63VeiCBe3Nvzl62WGTPUK+Mdj2eqSJgw63MgwnQSyw44dC7JDSWzne7b8amh6GHjHpq5ntBVktkAQ=="
+        length="17336177"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.6.0</title>
       <sparkle:version>22</sparkle:version>
       <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
