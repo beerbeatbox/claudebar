@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 import FlutterMacOS
 import Sparkle
@@ -236,6 +237,10 @@ class MainFlutterWindow: NSPanel {
       with: flutterViewController.registrar(forPlugin: "UpdaterChannel")
     )
 
+    // Console-visible audit trail for the phantom input-source capsule
+    // reports (see FocusSentinel).
+    FocusSentinel.register()
+
     super.awakeFromNib()
   }
 }
@@ -265,6 +270,7 @@ enum PopoverChannel {
       switch call.method {
       case "show":
         if let window {
+          os_log("popover show (tray click)", log: FocusSentinel.log, type: .info)
           // Allow key status only now that the user is opening the popover, so
           // typing lands in Flutter. At launch canBecomeKey stays false so the
           // window can render (registering the tray) without grabbing focus.
@@ -275,6 +281,7 @@ enum PopoverChannel {
         result(true)
       case "hide":
         if let window {
+          os_log("popover hide", log: FocusSentinel.log, type: .info)
           backdrop.hide(from: window)
           window.orderOut(nil)
           // Hand key back to the user's app and bar the hidden popover from
@@ -410,6 +417,96 @@ enum TrayRecoveryChannel {
     os_log("recovery trigger: %{public}@ (force=%{public}@)",
            log: log, type: .info, source, force ? "true" : "false")
     channel?.invokeMethod("recover", arguments: ["force": force])
+  }
+}
+
+/// Console-visible audit trail for the phantom input-source capsule (the
+/// "blue language switcher" flashing while the user types in another app).
+///
+/// The capsule is drawn by macOS whenever key focus moves across processes or
+/// the keyboard input source changes/re-asserts. The v1.5.8 fix removed the
+/// Sparkle focus steals, yet sightings persisted — so instead of another round
+/// of code-reading, log every event that CAN be involved, in release builds,
+/// via os_log (subsystem "one.beatbox.claudeUsageBar", category "focus"):
+///
+///   • any window of THIS process becoming/resigning key (class + visibility —
+///     this is what catches an invisible key window, and would have caught the
+///     old lingering Sparkle alert immediately),
+///   • the app itself activating/deactivating (nothing in ClaudeBar should
+///     EVER activate it outside a user-initiated Sparkle update flow),
+///   • every system keyboard input-source change (any process; the capsule
+///     always accompanies one of these or a focus re-assert).
+///
+/// To capture, run this in Terminal and wait for a capsule:
+///   log stream --info --predicate 'subsystem == "one.beatbox.claudeUsageBar"'
+/// A capsule with NO "focus" lines at that timestamp exonerates ClaudeBar; any
+/// window/activation line names the exact code path to fix next.
+enum FocusSentinel {
+  static let log = OSLog(subsystem: "one.beatbox.claudeUsageBar", category: "focus")
+  private static var observers: [NSObjectProtocol] = []
+
+  static func register() {
+    let center = NotificationCenter.default
+
+    // NSWindow key transitions post with the window as `object`; passing
+    // object:nil observes every window this process owns (panel, backdrop,
+    // status item, and any window a dependency orders in behind our back).
+    func watchWindows(_ name: Notification.Name, _ label: StaticString) {
+      observers.append(center.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { note in
+        guard let window = note.object as? NSWindow else { return }
+        os_log(label, log: log, type: .info, describe(window))
+      })
+    }
+    watchWindows(NSWindow.didBecomeKeyNotification, "window became key: %{public}@")
+    watchWindows(NSWindow.didResignKeyNotification, "window resigned key: %{public}@")
+
+    func watchApp(_ name: Notification.Name, _ label: StaticString) {
+      observers.append(center.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { _ in
+        os_log(label, log: log, type: .info)
+      })
+    }
+    watchApp(NSApplication.didBecomeActiveNotification, "APP ACTIVATED")
+    watchApp(NSApplication.didResignActiveNotification, "app deactivated")
+
+    // Fires for input-source switches made by ANY process, ours or not —
+    // matching a capsule sighting against this line (and its neighbours)
+    // separates "ClaudeBar moved focus" from "something else switched the
+    // layout". The name is Carbon's kTISNotifySelectedKeyboardInputSourceChanged,
+    // delivered on the distributed center.
+    observers.append(DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name(
+        "com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged"),
+      object: nil, queue: .main
+    ) { _ in
+      os_log("input source changed -> %{public}@", log: log, type: .info,
+             currentInputSourceID())
+    })
+
+    os_log("focus sentinel registered (input source: %{public}@)",
+           log: log, type: .info, currentInputSourceID())
+  }
+
+  /// Class, title, and state of a window in one line; popoverWantsKey is the
+  /// gate that is supposed to keep the hidden popover from ever holding key.
+  private static func describe(_ window: NSWindow) -> String {
+    var line = "\(type(of: window)) \"\(window.title)\" " +
+      "visible=\(window.isVisible) onScreen=\(window.screen != nil)"
+    if let panel = window as? MainFlutterWindow {
+      line += " popoverWantsKey=\(panel.popoverWantsKey)"
+    }
+    return line
+  }
+
+  /// e.g. "com.apple.keylayout.Thai" / "com.apple.keylayout.ABC".
+  private static func currentInputSourceID() -> String {
+    guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+          let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
+    else { return "unknown" }
+    return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
   }
 }
 

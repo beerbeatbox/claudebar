@@ -80,7 +80,19 @@ class PopoverWindow with WindowListener {
       await windowManager.setAlwaysOnTop(true);
       await windowManager.setResizable(false);
       await windowManager.setMovable(false);
-      await windowManager.setVisibleOnAllWorkspaces(true);
+      // visibleOnFullScreen adds .fullScreenAuxiliary, without which a window
+      // cannot appear over a fullscreen Space — window_manager defaults it to
+      // FALSE. With it missing, opening the popover from a fullscreen app
+      // ordered the panel onto a Space the user could not see while it still
+      // became the KEY window: keystrokes died and macOS flashed the
+      // input-source capsule at the caret with no visible cause, exactly the
+      // invisible-key-window pathology of the old Sparkle bug. (The blur
+      // backdrop always had .fullScreenAuxiliary — see BlurBackdropWindow —
+      // so the two windows disagreed about which Spaces they could join.)
+      await windowManager.setVisibleOnAllWorkspaces(
+        true,
+        visibleOnFullScreen: true,
+      );
       await windowManager.hide();
     });
 
