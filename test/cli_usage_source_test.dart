@@ -16,6 +16,27 @@ void main() {
       'Current week (all models): 28% used · resets Jun 14 at 1:59am (Asia/Bangkok)\n'
       'Current week (Sonnet only): 0% used';
 
+  group('CliUsageSource.childEnvironment', () {
+    // Regression guard for the phantom input-source capsule: macOS puts
+    // __CFBundleIdentifier in a bundled app's environment, and handing it to a
+    // spawned CLI child makes CoreFoundation there believe the child belongs to
+    // ClaudeBar's bundle — a GUI-session citizen rather than a background tool,
+    // which is what made every refresh flash the language badge at the user's
+    // caret. Passing these through must stay a deliberate choice, not a default.
+    test('drops the CoreFoundation bundle variables macOS injects', () {
+      final env = CliUsageSource().childEnvironment();
+      expect(env.containsKey('__CFBundleIdentifier'), isFalse);
+      expect(env.containsKey('__CFBundleVersion'), isFalse);
+      expect(env.containsKey('__CFBundleShortVersionString'), isFalse);
+    });
+
+    test('still hands the child a PATH that can resolve node/claude', () {
+      final env = CliUsageSource().childEnvironment();
+      expect(env['PATH'], isNotNull);
+      expect(env['PATH'], contains('/usr/local/bin'));
+    });
+  });
+
   group('CliUsageSource.parseUsageText', () {
     test('parses the real /usage output shape', () {
       final snap =

@@ -268,9 +268,10 @@ class CliUsageSource {
         bin,
         args,
         workingDirectory: _ensureProbeDir(),
-        // npm-installed `claude` is a Node script — make sure `node` resolves
-        // even though GUI apps launch with a minimal PATH.
-        environment: {...Platform.environment, 'PATH': _augmentedPath()},
+        environment: childEnvironment(),
+        // The sanitising in childEnvironment only takes effect if the parent
+        // environment is NOT merged back in on top of it.
+        includeParentEnvironment: false,
       );
       final outF = proc.stdout.transform(utf8.decoder).join();
       final errF = proc.stderr.transform(utf8.decoder).join();
@@ -311,8 +312,14 @@ class CliUsageSource {
       if (File(c).existsSync() && _isExecutable(c)) return _binary = c;
     }
     try {
-      final r = await Process.run('/bin/zsh', ['-lc', 'command -v claude'])
-          .timeout(const Duration(seconds: 5));
+      final r = await Process.run(
+        '/bin/zsh',
+        ['-lc', 'command -v claude'],
+        // Same sanitising as the probes themselves — this login shell is a
+        // child of a GUI app too (see childEnvironment).
+        environment: childEnvironment(),
+        includeParentEnvironment: false,
+      ).timeout(const Duration(seconds: 5));
       // Profiles can echo before the path — keep only the last line.
       final lines = (r.stdout as String)
           .trim()
@@ -345,6 +352,37 @@ class CliUsageSource {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Environment for a spawned probe: everything ClaudeBar itself has, minus
+  /// the CoreFoundation variables macOS injects into a GUI app's environment.
+  ///
+  /// `__CFBundleIdentifier` is the one that matters. macOS sets it on a bundled
+  /// app's process, and Dart's default `Process.start` hands the parent's whole
+  /// environment to the child — so every `claude` probe started with
+  /// CoreFoundation believing that plain CLI child was part of ClaudeBar's
+  /// bundle, i.e. part of the GUI session, rather than an ordinary background
+  /// tool. That is the difference between a child that quietly runs and a child
+  /// that registers with the session's text-input machinery on startup; a new
+  /// text-input client makes macOS re-assert the system keyboard layout, which
+  /// draws the input-source capsule at whatever caret the user is typing in.
+  ///
+  /// Which matches what was actually observed: the capsule kept appearing on
+  /// the refresh cadence with the cursor sitting still, ClaudeBar never took
+  /// focus (FocusSentinel logged no key-window or activation events at all),
+  /// and quitting ClaudeBar stopped it outright.
+  ///
+  /// `__CFBundleVersion` / `__CFBundleShortVersionString` ride along from the
+  /// same source and are just as wrong to leak into a child, so they go too.
+  @visibleForTesting
+  Map<String, String> childEnvironment() {
+    return Map<String, String>.from(Platform.environment)
+      ..remove('__CFBundleIdentifier')
+      ..remove('__CFBundleVersion')
+      ..remove('__CFBundleShortVersionString')
+      // npm-installed `claude` is a Node script — make sure `node` resolves
+      // even though GUI apps launch with a minimal PATH.
+      ..['PATH'] = _augmentedPath();
   }
 
   String _augmentedPath() {
