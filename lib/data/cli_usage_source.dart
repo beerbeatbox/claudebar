@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/diag.dart';
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
 import '../models/usage_window.dart';
@@ -257,6 +258,11 @@ class CliUsageSource {
   Future<String?> _run(List<String> args) async {
     final bin = await _resolveBinary();
     if (bin == null) return null;
+    // Bracket every child process we spawn on the diagnostic timeline. The
+    // refresh timer fires on a fixed cadence, so if a phantom input-source
+    // change keeps landing between these two lines, the probe — not focus —
+    // is the thing to chase. (See FocusSentinel in MainFlutterWindow.swift.)
+    Diag.log('probe start: ${args.join(' ')}');
     try {
       final proc = await Process.start(
         bin,
@@ -273,6 +279,7 @@ class CliUsageSource {
         return -1;
       });
       final out = await outF;
+      Diag.log('probe done: ${args.first} exit=$exit');
       if (exit != 0) {
         debugPrint(
           '[ClaudeBar] claude ${args.join(' ')} exited $exit: '
@@ -282,7 +289,7 @@ class CliUsageSource {
       }
       return out;
     } catch (e) {
-      debugPrint('[ClaudeBar] failed to spawn claude: $e');
+      Diag.log('probe failed: ${args.first} — $e');
       return null;
     }
   }

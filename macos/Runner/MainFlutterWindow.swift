@@ -472,18 +472,40 @@ enum FocusSentinel {
     watchApp(NSApplication.didBecomeActiveNotification, "APP ACTIVATED")
     watchApp(NSApplication.didResignActiveNotification, "app deactivated")
 
-    // Fires for input-source switches made by ANY process, ours or not —
-    // matching a capsule sighting against this line (and its neighbours)
-    // separates "ClaudeBar moved focus" from "something else switched the
-    // layout". The name is Carbon's kTISNotifySelectedKeyboardInputSourceChanged,
+    // Which app the USER is in whenever another app takes over. macOS can
+    // restore a per-app/per-document input source on an app switch ("
+    // Automatically switch to a document's input source"), which changes the
+    // layout and draws the capsule with nobody pressing a key. Pairing these
+    // lines with the input-source line below is what tells an app switch
+    // apart from a layout change that arrived out of nowhere.
+    observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didActivateApplicationNotification,
+      object: nil, queue: .main
+    ) { note in
+      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+        as? NSRunningApplication
+      os_log("frontmost app -> %{public}@", log: log, type: .info,
+             app?.bundleIdentifier ?? app?.localizedName ?? "unknown")
+    })
+
+    // Fires for input-source switches made by ANY process, ours or not — this
+    // observer only WATCHES the system-wide notification, it never causes one.
+    // Logging the frontmost app alongside is the whole point: a change that
+    // lands while the user sits in one app, with no "frontmost app ->" line
+    // before it, is a very different bug from one that follows an app switch.
+    // The name is Carbon's kTISNotifySelectedKeyboardInputSourceChanged,
     // delivered on the distributed center.
     observers.append(DistributedNotificationCenter.default().addObserver(
       forName: NSNotification.Name(
         "com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged"),
       object: nil, queue: .main
     ) { _ in
-      os_log("input source changed -> %{public}@", log: log, type: .info,
-             currentInputSourceID())
+      let front = NSWorkspace.shared.frontmostApplication
+      os_log("input source changed -> %{public}@ (frontmost: %{public}@, claudebar active: %{public}@)",
+             log: log, type: .info,
+             currentInputSourceID(),
+             front?.bundleIdentifier ?? front?.localizedName ?? "unknown",
+             NSApp.isActive ? "YES" : "no")
     })
 
     os_log("focus sentinel registered (input source: %{public}@)",

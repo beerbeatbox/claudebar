@@ -12,6 +12,7 @@ import '../settings/prefs.dart';
 import '../state/usage_controller.dart';
 import '../ui/format.dart';
 import '../ui/tokens.dart';
+import 'diag.dart';
 import 'popover_window.dart';
 import 'tray_glyph.dart';
 import 'updater.dart';
@@ -49,13 +50,10 @@ class TrayController with TrayListener {
   /// self-heal could otherwise run at once).
   bool _recovering = false;
 
-  /// Mirrors a diagnostic line to debugPrint AND to native os_log (via the
-  /// recovery channel), so the recovery flow is visible in Console.app even in
-  /// release builds, where debugPrint is stripped.
-  void _diag(String msg) {
-    debugPrint('[ClaudeBar] $msg');
-    _recoveryChannel.invokeMethod('log', msg);
-  }
+  /// Mirrors a diagnostic line to debugPrint AND to native os_log, so the
+  /// recovery flow is visible in Console.app even in release builds, where
+  /// debugPrint is stripped.
+  void _diag(String msg) => Diag.log(msg);
 
   Future<void> init() async {
     trayManager.addListener(this);
