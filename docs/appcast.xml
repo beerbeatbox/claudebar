@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.3</title>
+      <sparkle:version>25</sparkle:version>
+      <sparkle:shortVersionString>1.6.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**Fixes the phantom blue language capsule appearing at your cursor every few minutes.** ClaudeBar checks your usage on a timer by running the `claude` CLI, and it was handing those background runs the environment macOS gives a bundled app — so each one started up as part of the graphical session instead of as an ordinary background tool, and macOS re-asserted the keyboard layout at whatever text field your cursor was in. The badge appeared with no key pressed and no language actually chosen. Background runs are now spawned as plain background processes.</li><li>Usage checks themselves are unchanged in behaviour and cadence.</li></ul> ]]></description>
+      <pubDate>Sat, 08 Aug 2026 16:48:11 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.6.3/ClaudeBar-1.6.3.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="0StdGFh7JAncClZhZ4TX0apd352V2fqcw5o58vnjmCuirSKc5c++lr5C5zrsLzPWoEHhSmAaeWMsjKUlOowXDg=="
+        length="17341248"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.6.2</title>
       <sparkle:version>24</sparkle:version>
       <sparkle:shortVersionString>1.6.2</sparkle:shortVersionString>
