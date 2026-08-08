@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.2</title>
+      <sparkle:version>24</sparkle:version>
+      <sparkle:shortVersionString>1.6.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**Sharpens the diagnostics for the phantom blue language capsule.** The first captures from 1.6.1 showed ClaudeBar never taking keyboard focus, so the trail now records what actually surrounds a layout change: which app is frontmost when the input source switches, every app switch macOS makes, and each usage probe ClaudeBar runs — all on one timeline in Console (subsystem &quot;one.beatbox.claudeUsageBar&quot;).</li><li>No behaviour changes; this build only adds logging.</li></ul> ]]></description>
+      <pubDate>Sat, 08 Aug 2026 13:40:23 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.6.2/ClaudeBar-1.6.2.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="FWFtYbUhZzf2qw4ExMuCAbOVKRehAzkzwzZ038EbYYQYGiUHPjo8iMW61FjnL1fk92EHISzuuX7qcw+7+nsCAg=="
+        length="17339131"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.6.1</title>
       <sparkle:version>23</sparkle:version>
       <sparkle:shortVersionString>1.6.1</sparkle:shortVersionString>
