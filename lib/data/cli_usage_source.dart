@@ -83,6 +83,18 @@ class CliUsageSource {
     var gotReply = false;
     if (out != null) {
       final envelope = decodeEnvelope(out);
+      if (envelope == null) {
+        // Exit 0 but nothing JSON-shaped came back.
+        Diag.log('usage envelope undecodable: ${_snippet(out)}');
+      } else if (envelope['is_error'] == true || envelope['result'] is! String) {
+        // The common real-world failure: the CLI exits 0 and hands back an
+        // ERROR envelope. Without this line the probe log looks perfectly
+        // healthy (two probes, exit=0) while the menu bar sits grey saying
+        // "Couldn't read usage" — the CLI's own message was thrown away.
+        Diag.log('usage envelope is_error='
+            '${envelope['is_error']} subtype=${envelope['subtype']} '
+            'result=${_snippet('${envelope['result']}')}');
+      }
       if (envelope != null && envelope['is_error'] != true) {
         final result = envelope['result'];
         if (result is String) {
@@ -102,9 +114,16 @@ class CliUsageSource {
       final snapshot =
           parseUsageText(text, plan: await _planLabel(), now: _now());
       if (snapshot != null) return CliUsageResult.ok(snapshot);
-      debugPrint('[ClaudeBar] /usage output did not match the expected shape');
+      Diag.log('usage text unparsable: ${_snippet(text)}');
     }
     return CliUsageResult.fail(await _classifyFailure(gotReply: gotReply));
+  }
+
+  /// First [max] characters of [raw], newlines flattened — enough to identify
+  /// what came back without dumping a whole reply into the system log.
+  static String _snippet(String raw, [int max = 300]) {
+    final flat = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return flat.length <= max ? flat : '${flat.substring(0, max)}…';
   }
 
   /// Runs only when a probe failed (rare): works out *why*, so each cause
@@ -282,10 +301,9 @@ class CliUsageSource {
       final out = await outF;
       Diag.log('probe done: ${args.first} exit=$exit');
       if (exit != 0) {
-        debugPrint(
-          '[ClaudeBar] claude ${args.join(' ')} exited $exit: '
-          '${(await errF).trim()}',
-        );
+        // Diag, not debugPrint: debugPrint is stripped from release builds,
+        // which is exactly where a user's failing probe needs explaining.
+        Diag.log('probe stderr: ${args.first} — ${_snippet((await errF).trim())}');
         return null;
       }
       return out;
