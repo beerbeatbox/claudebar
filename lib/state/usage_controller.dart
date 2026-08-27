@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/diag.dart';
 import '../data/cli_usage_source.dart';
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
@@ -201,7 +202,19 @@ class UsageController extends Notifier<UsageState> {
   /// data is current the moment the user looks at it.
   void refreshIfDue() {
     final last = _lastAttempt;
-    if (last != null && DateTime.now().difference(last) < _interval) return;
+    if (last == null) {
+      refresh();
+      return;
+    }
+    final elapsed = DateTime.now().difference(last);
+    if (elapsed < _interval) return;
+    // A gap well past the interval means the timers were frozen (App Nap,
+    // sleep/wake) — worth naming, since the probe lines alone just look like a
+    // hole in the log.
+    if (elapsed > _interval * 2) {
+      Diag.log('refresh overdue by ${elapsed.inSeconds}s '
+          '(interval ${_interval.inMinutes}m) — timers were stalled');
+    }
     refresh();
   }
 
@@ -223,6 +236,8 @@ class UsageController extends Notifier<UsageState> {
     if (result.isOk) {
       final fresh = result.snapshot!;
       _failures = 0;
+      Diag.log('refresh ok: session ${fresh.session.percent.round()}% '
+          'weekly ${fresh.weekly.percent.round()}%');
       state = UsageState(snapshot: fresh, loading: false);
       _lock(_cooldown);
     } else {
@@ -241,7 +256,13 @@ class UsageController extends Notifier<UsageState> {
         loading: false,
       );
       _failures = transient ? 0 : _failures + 1;
-      _scheduleRetry(transient ? _retryDelay : _backoff());
+      final delay = transient ? _retryDelay : _backoff();
+      // The probe's own exit code says nothing about *why* a refresh went
+      // grey — a gated noData reply exits 0 like a good one. Name the outcome
+      // so a grey episode is explainable from the log alone.
+      Diag.log('refresh failed: ${err?.kind.name} '
+          '(kept=${fresh ? 'last' : 'stale'}, retry in ${delay.inSeconds}s)');
+      _scheduleRetry(delay);
     }
   }
 

@@ -18,6 +18,8 @@ class Diag {
 
   static void log(String message) {
     debugPrint('[ClaudeBar] $message');
-    _channel.invokeMethod('log', message);
+    // Fire-and-forget: a missing handler (unit tests, an isolate without the
+    // plugin) must never surface as an unhandled async error from a log call.
+    _channel.invokeMethod('log', message).catchError((Object _) => null);
   }
 }
