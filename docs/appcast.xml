@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.4</title>
+      <sparkle:version>26</sparkle:version>
+      <sparkle:shortVersionString>1.6.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>### Changes</li><li>**แก้อาการเมนูบาร์ค้างเป็นสีเทา &quot;Couldn&#x27;t read usage&quot;** — ClaudeBar อ่านคำตอบของ Claude Code ไม่ออกเมื่อมี MCP server พ่นข้อความปนออกมาก่อน JSON ทั้งที่ตัวเลขการใช้งานมาครบ ตอนนี้ทนข้อความแปลกปลอมทั้งก่อนและหลัง JSON แล้ว</li><li>ถ้าอ่าน usage ไม่สำเร็จ ClaudeBar จะลองใหม่เองอัตโนมัติ (30 วินาที / 90 วินาที / 3 นาที / 5 นาที) ไม่ต้องกด Refresh เองอีกต่อไป</li><li>รีเฟรชตามรอบเวลาแม่นยำขึ้นหลังเครื่องหลับหรือถูก macOS พักการทำงาน และเปิด popover เมื่อไหร่ก็ดึงค่าล่าสุดให้ทันที</li><li>เพิ่มบันทึกวินิจฉัยใน Console (subsystem `one.beatbox.claudeUsageBar`) บอกผลการรีเฟรชแต่ละรอบ</li></ul> ]]></description>
+      <pubDate>Thu, 27 Aug 2026 05:41:19 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.6.4/ClaudeBar-1.6.4.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="7QHJUv5OdlSF93YOs6B4O1P2IwzcKpIpPujCE/19tM/k3onxhbKAQsNJ65SpwpXRFSyMa/AvDe/PUW4A+5HJDA=="
+        length="17347051"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.6.3</title>
       <sparkle:version>25</sparkle:version>
       <sparkle:shortVersionString>1.6.3</sparkle:shortVersionString>
