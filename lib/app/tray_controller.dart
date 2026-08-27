@@ -83,6 +83,10 @@ class TrayController with TrayListener {
   /// macOS has silently dropped the item (a Control Center eviction when the
   /// menu bar is full, with no display event to catch), recreate it instead.
   Future<void> _tick() async {
+    // The usage controller's own watchdog is the primary auto-refresh driver;
+    // this second nudge costs nothing (it no-ops until the interval is up) and
+    // means a tick that survived App Nap also pulls the reading forward.
+    container.read(usageControllerProvider.notifier).refreshIfDue();
     if (!_recovering && await _trayMissing()) {
       await _recover('self-heal');
     } else {
@@ -280,7 +284,12 @@ class TrayController with TrayListener {
   // ---- TrayListener ----
 
   @override
-  void onTrayIconMouseDown() => popover.toggle();
+  void onTrayIconMouseDown() {
+    // Opening the popover is the moment the numbers are actually read, so make
+    // sure they aren't a stale leftover from a suspended timer.
+    container.read(usageControllerProvider.notifier).refreshIfDue();
+    popover.toggle();
+  }
 
   @override
   void onTrayIconRightMouseDown() => trayManager.popUpContextMenu();
@@ -289,6 +298,7 @@ class TrayController with TrayListener {
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
       case 'open':
+        container.read(usageControllerProvider.notifier).refreshIfDue();
         popover.show();
         break;
       case 'refresh':

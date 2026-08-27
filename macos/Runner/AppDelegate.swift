@@ -28,12 +28,27 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
+  // Held for the lifetime of the app so macOS never puts ClaudeBar into App
+  // Nap. A windowless LSUIElement agent is App Nap's prime candidate, and a
+  // napped app has its timers coalesced and suspended — which stalls the usage
+  // refresh interval for minutes at a time and leaves the menu bar showing a
+  // stale reading until the user hits Refresh by hand. The app is idle between
+  // probes, so opting out costs effectively nothing.
+  private var activityToken: NSObjectProtocol?
+
   // Running straight from the mounted .dmg crashes the moment the image is
   // ejected: once the backing vnode is force-unmounted, the next page-in of the
   // app's code raises SIGBUS (we saw exactly this in a crash report). Nudge the
   // user to install into /Applications before that can happen.
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
+    activityToken = ProcessInfo.processInfo.beginActivity(
+      // .userInitiatedAllowingIdleSystemSleep is the option that actually
+      // opts out of App Nap (.background does not) while still letting the
+      // Mac go to sleep normally — ClaudeBar must not keep a laptop awake.
+      options: .userInitiatedAllowingIdleSystemSleep,
+      reason: "ClaudeBar refreshes usage on a timer"
+    )
     guard Bundle.main.bundlePath.hasPrefix("/Volumes/") else { return }
     let alert = NSAlert()
     alert.alertStyle = .warning

@@ -13,6 +13,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Fails the first probe, then serves a snapshot — mirrors the transient CLI
+/// failure that used to strand the display on "showing last sync".
+class _FlakyCliSource extends CliUsageSource {
+  int calls = 0;
+
+  @override
+  Future<CliUsageResult> fetch() async {
+    calls++;
+    if (calls == 1) return const CliUsageResult.fail(UsageError.parseFailed);
+    return CliUsageResult.ok(UsageSnapshot(
+      session: const UsageWindow(percent: 35, label: 'Session · 5h'),
+      weekly: const UsageWindow(percent: 28, label: 'Weekly · 7d'),
+      plan: 'Max',
+      fetchedAt: DateTime(2026, 6, 12, 22, 5),
+    ));
+  }
+}
+
 /// Serves one canned snapshot without spawning the real CLI.
 class _FakeCliSource extends CliUsageSource {
   int calls = 0;
@@ -60,6 +78,41 @@ void main() {
     expect(after.loading, isFalse);
     expect(cli.calls, 1,
         reason: 'interval change must not trigger an extra fetch');
+  });
+
+  test('a failed probe leaves nothing blocking the next refresh', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cli = _FlakyCliSource();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        cliUsageSourceProvider.overrideWithValue(cli),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(usageControllerProvider);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    final failed = container.read(usageControllerProvider);
+    expect(failed.error?.kind, UsageErrorKind.parseFailed);
+    expect(failed.locked, isFalse,
+        reason: 'a failure must not hold the refresh lock');
+
+    // The scheduled retry (and the watchdog tick) both land here.
+    await container.read(usageControllerProvider.notifier).refresh();
+    final recovered = container.read(usageControllerProvider);
+    expect(cli.calls, 2);
+    expect(recovered.error, isNull);
+    expect(recovered.snapshot?.stale, isFalse);
+
+    // Within the interval, a due-check is a no-op — the watchdog polls far
+    // faster than the refresh interval and must not spam the CLI.
+    container.read(usageControllerProvider.notifier).refreshIfDue();
+    await Future<void>.delayed(Duration.zero);
+    expect(cli.calls, 2);
   });
 
   // The fetch gate means a noData reply is the latest reading the CLI can give,

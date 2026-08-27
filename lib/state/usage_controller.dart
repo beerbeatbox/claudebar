@@ -77,6 +77,35 @@ class UsageController extends Notifier<UsageState> {
   /// interval and staying stuck on the last reading.
   static const _retryDelay = Duration(seconds: 45);
 
+  /// Backoff steps for a *failed* probe that isn't the gated noData case — a
+  /// killed/non-zero CLI run (surfaced as parseFailed), a network blip, an
+  /// unknown error. These used to get no retry at all: the display went stale
+  /// and stayed stale until the next interval tick, or until the user hit
+  /// Refresh by hand — which is exactly the reported symptom, since one
+  /// transient probe failure was enough to strand the reading. Retry soon,
+  /// then back off, so a genuinely broken setup isn't probed every 30s.
+  static const _errorBackoff = [
+    Duration(seconds: 30),
+    Duration(seconds: 90),
+    Duration(minutes: 3),
+    Duration(minutes: 5),
+  ];
+
+  /// How often the watchdog checks whether a refresh is due. The refresh
+  /// schedule is wall-clock based (last attempt + interval) rather than a
+  /// Timer.periodic on the interval itself: a background LSUIElement app gets
+  /// its timers coalesced and suspended by macOS (App Nap, sleep/wake), so a
+  /// periodic timer can silently skip whole intervals. A short watchdog that
+  /// compares timestamps fires as soon as the app runs again, however long it
+  /// was frozen.
+  static const _watchdogPeriod = Duration(seconds: 20);
+
+  /// A refresh in flight longer than this is treated as dead, so a probe that
+  /// somehow never completes can't wedge `_refreshing` true forever and block
+  /// every later refresh. Generously above the source's own 20s-per-spawn
+  /// timeout (a failing fetch spawns at most three).
+  static const _refreshWatchdog = Duration(minutes: 2);
+
   /// Keep showing the last good reading as current until it's older than this
   /// (~2 fetch-gate cycles). Its "As of HH:MM" already carries the real age;
   /// only past here is a noData failure worth the "No fresh reading" banner.
@@ -87,9 +116,23 @@ class UsageController extends Notifier<UsageState> {
   Timer? _retryTimer;
   bool _refreshing = false;
 
+  /// When the in-flight refresh started (null when none is running).
+  DateTime? _startedAt;
+
+  /// When the last refresh attempt began — the anchor for "is a refresh due?".
+  DateTime? _lastAttempt;
+
+  /// Consecutive failed probes, indexing into [_errorBackoff].
+  int _failures = 0;
+
+  /// The configured auto-refresh interval, mirrored out of settings so the
+  /// watchdog can compare against it without re-reading the provider.
+  Duration _interval = const Duration(minutes: 5);
+
   @override
   UsageState build() {
     final minutes = ref.watch(settingsProvider.select((s) => s.refreshMinutes));
+    _interval = Duration(minutes: minutes);
 
     ref.onDispose(() {
       _timer?.cancel();
@@ -97,7 +140,7 @@ class UsageController extends Notifier<UsageState> {
       _retryTimer?.cancel();
     });
     _timer?.cancel();
-    _timer = Timer.periodic(Duration(minutes: minutes), (_) => refresh());
+    _timer = Timer.periodic(_watchdogPeriod, (_) => refreshIfDue());
 
     // Changing the interval re-runs build (it watches refreshMinutes). Keep
     // the current snapshot and cooldown lock — resetting to loading() blanked
@@ -121,8 +164,10 @@ class UsageController extends Notifier<UsageState> {
   /// backoff window — so neither button-mashing nor the periodic timer can
   /// hammer the endpoint.
   Future<void> refresh() async {
-    if (_refreshing || state.locked) return;
+    if (_inFlight || state.locked) return;
     _refreshing = true;
+    _startedAt = DateTime.now();
+    _lastAttempt = _startedAt;
     // A refresh is starting now — drop any queued fast retry; this run (or the
     // success cooldown it sets) supersedes it.
     _retryTimer?.cancel();
@@ -130,7 +175,34 @@ class UsageController extends Notifier<UsageState> {
       await _refresh();
     } finally {
       _refreshing = false;
+      _startedAt = null;
     }
+  }
+
+  /// True while a probe is genuinely running. A refresh that has been in
+  /// flight past [_refreshWatchdog] is considered dead, so a wedged probe
+  /// can't block refreshes for the rest of the run.
+  bool get _inFlight {
+    if (!_refreshing) return false;
+    final started = _startedAt;
+    if (started != null &&
+        DateTime.now().difference(started) > _refreshWatchdog) {
+      _refreshing = false;
+      return false;
+    }
+    return true;
+  }
+
+  /// Refreshes only if the last attempt is at least one interval old. This is
+  /// the auto-refresh schedule: driven by wall-clock comparison rather than by
+  /// a timer that fires exactly on the interval, so suspended or coalesced
+  /// timers (App Nap, sleep/wake) catch up instead of skipping a cycle.
+  /// Also called when the popover opens and on the tray's minute tick, so the
+  /// data is current the moment the user looks at it.
+  void refreshIfDue() {
+    final last = _lastAttempt;
+    if (last != null && DateTime.now().difference(last) < _interval) return;
+    refresh();
   }
 
   Future<void> _refresh() async {
@@ -150,6 +222,7 @@ class UsageController extends Notifier<UsageState> {
     final result = await ref.read(cliUsageSourceProvider).fetch();
     if (result.isOk) {
       final fresh = result.snapshot!;
+      _failures = 0;
       state = UsageState(snapshot: fresh, loading: false);
       _lock(_cooldown);
     } else {
@@ -167,16 +240,28 @@ class UsageController extends Notifier<UsageState> {
         error: err,
         loading: false,
       );
-      if (transient) _scheduleRetry();
+      _failures = transient ? 0 : _failures + 1;
+      _scheduleRetry(transient ? _retryDelay : _backoff());
     }
   }
 
-  /// One-shot fast retry after a gated (noData) probe, replacing any pending
-  /// one. Cheap — a gated probe makes no API call — so this just races to catch
-  /// the fetch gate the moment it reopens.
-  void _scheduleRetry() {
+  /// Backoff for the current failure streak, never longer than the configured
+  /// interval — the watchdog would take over at that point anyway.
+  Duration _backoff() {
+    final step = _errorBackoff[
+      (_failures - 1).clamp(0, _errorBackoff.length - 1)
+    ];
+    return step > _interval ? _interval : step;
+  }
+
+  /// One-shot retry after a failed probe, replacing any pending one. After a
+  /// gated (noData) reply this is cheap — a gated probe makes no API call — so
+  /// it just races to catch the fetch gate the moment it reopens; after a real
+  /// failure it walks [_errorBackoff] so a stale reading recovers on its own
+  /// instead of waiting for a manual Refresh.
+  void _scheduleRetry(Duration delay) {
     _retryTimer?.cancel();
-    _retryTimer = Timer(_retryDelay, refresh);
+    _retryTimer = Timer(delay, refresh);
   }
 
   /// Whether a failed refresh should keep showing [last] as the current reading
