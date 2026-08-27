@@ -157,6 +157,37 @@ void main() {
       expect(env['session_id'], 'abc');
     });
 
+    // The grey-menu-bar regression: an MCP server (or any startup warning)
+    // prints a line containing a brace before the envelope. Anchoring on the
+    // first `{` made the whole reply undecodable, so a perfectly good reading
+    // was reported as "Couldn't read usage".
+    test('skips noise that merely contains a brace', () {
+      final env = CliUsageSource.decodeEnvelope(
+        'client.listTools() called but server does not advertise '
+        '{tools} capability - returning empty list\n'
+        '{"type":"result","is_error":false,"result":"Current session: 22% used",'
+        '"session_id":"abc"}',
+      );
+      expect(env, isNotNull);
+      expect(env!['result'], 'Current session: 22% used');
+    });
+
+    test('picks the envelope over a JSON log line printed before it', () {
+      final env = CliUsageSource.decodeEnvelope(
+        '{"level":"warn","msg":"mcp server slow"}\n'
+        '{"type":"result","is_error":false,"result":"text"}',
+      );
+      expect(env?['result'], 'text');
+    });
+
+    test('survives noise printed after the envelope', () {
+      final env = CliUsageSource.decodeEnvelope(
+        '{"type":"result","is_error":false,"result":"text"}\n'
+        'client.listTools() called but server does not advertise {tools}',
+      );
+      expect(env?['result'], 'text');
+    });
+
     test('returns null on non-JSON output', () {
       expect(CliUsageSource.decodeEnvelope('command not found'), isNull);
       expect(CliUsageSource.decodeEnvelope(''), isNull);

@@ -258,18 +258,68 @@ class CliUsageSource {
     return candidate;
   }
 
-  /// Decodes the CLI's JSON output, skipping any preamble noise before the
-  /// first `{` (shell profiles and Node warnings occasionally print first).
+  /// Decodes the CLI's JSON envelope out of a reply that may carry noise
+  /// around it (shell profiles, Node warnings, MCP server chatter).
+  ///
+  /// Anchoring on the FIRST `{` and decoding to the end of the output is not
+  /// enough on either side:
+  ///
+  /// - Noise BEFORE the envelope that merely CONTAINS a brace — e.g.
+  ///   `…listTools() called but server does not advertise {tools} capability…`
+  ///   from an MCP server — makes that decode fail, and the whole reply is
+  ///   thrown away.
+  /// - Noise AFTER the envelope is trailing garbage, which `jsonDecode`
+  ///   rejects just as hard.
+  ///
+  /// Either way the reply reads downstream as "the CLI produced nothing
+  /// parsable", i.e. a format change, and the menu bar goes grey with
+  /// "Couldn't read usage" while a perfectly good reading sits in the output.
+  /// It's intermittent, because whether an MCP server chats at all varies run
+  /// to run — which is exactly how the grey episodes showed up.
+  ///
+  /// So walk every `{`, trying the rest of the output and then just the rest
+  /// of that line (print mode emits the envelope as one line, so the line form
+  /// survives trailing noise), and keep the first object that looks like the
+  /// envelope. Any other decodable object is only a fallback.
   @visibleForTesting
   static Map<String, dynamic>? decodeEnvelope(String raw) {
-    final start = raw.indexOf('{');
-    if (start < 0) return null;
-    try {
-      final decoded = jsonDecode(raw.substring(start).trim());
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
+    // Enough to clear any realistic preamble without turning a pathological
+    // reply into a decode storm.
+    const maxCandidates = 64;
+    Map<String, dynamic>? fallback;
+
+    Map<String, dynamic>? tryDecode(String text) {
+      try {
+        final decoded = jsonDecode(text.trim());
+        return decoded is Map<String, dynamic> ? decoded : null;
+      } catch (_) {
+        return null;
+      }
     }
+
+    var start = raw.indexOf('{');
+    for (var tried = 0; start >= 0 && tried < maxCandidates; tried++) {
+      final lineEnd = raw.indexOf('\n', start);
+      for (final candidate in [
+        raw.substring(start),
+        if (lineEnd > start) raw.substring(start, lineEnd),
+      ]) {
+        final map = tryDecode(candidate);
+        if (map == null) continue;
+        // The print-mode envelope always carries these; a stray JSON log line
+        // from some tool does not.
+        if (map.containsKey('result') ||
+            map.containsKey('session_id') ||
+            map['type'] == 'result' ||
+            map.containsKey('loggedIn') ||
+            map.containsKey('subscriptionType')) {
+          return map;
+        }
+        fallback ??= map;
+      }
+      start = raw.indexOf('{', start + 1);
+    }
+    return fallback;
   }
 
   // ---- process plumbing ----
