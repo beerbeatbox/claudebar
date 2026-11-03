@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/usage_error.dart';
 import '../models/usage_snapshot.dart';
+import '../state/sign_in_controller.dart';
 import '../state/usage_controller.dart';
 import 'format.dart';
 import 'meter_row.dart';
@@ -39,6 +40,9 @@ class _PopoverState extends ConsumerState<Popover> {
   Widget build(BuildContext context) {
     final t = ClaudeTokens.of(context);
     final state = ref.watch(usageControllerProvider);
+    final signingIn = ref.watch(
+      signInControllerProvider.select((s) => s.inProgress),
+    );
 
     // No fill colour here on purpose: the side/bottom gutter must stay
     // hit-transparent so a tap there falls through to the dismiss layer behind
@@ -79,6 +83,7 @@ class _PopoverState extends ConsumerState<Popover> {
                     )
                     : _UsageView(
                       state: state,
+                      signingIn: signingIn,
                       onSettings: () => setState(() => _showSettings = true),
                     ),
           ),
@@ -90,10 +95,14 @@ class _PopoverState extends ConsumerState<Popover> {
 
 class _UsageView extends StatelessWidget {
   final UsageState state;
+
+  /// A ClaudeBar-started sign-in is running (see [SignInController]).
+  final bool signingIn;
   final VoidCallback onSettings;
 
   const _UsageView({
     required this.state,
+    required this.signingIn,
     required this.onSettings,
   });
 
@@ -102,6 +111,10 @@ class _UsageView extends StatelessWidget {
     final t = ClaudeTokens.of(context);
     final snapshot = state.snapshot;
     final error = state.error;
+    // Signed out — or signing in right now: the one actionable state, so it
+    // leads the card and never gets swapped for "Reading usage…" by a
+    // background retry (that would whisk away the Cancel button mid-sign-in).
+    final showSignIn = state.needsSignIn || signingIn;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,15 +139,24 @@ class _UsageView extends StatelessWidget {
         const SizedBox(height: 14),
 
         // Body.
-        if (snapshot == null && state.loading)
+        if (showSignIn) ...[
+          _SignInBlock(error: error, t: t),
+          // Room before the greyed meters the card explains; alone, the
+          // footer divider already spaces it.
+          if (snapshot != null) const SizedBox(height: 12),
+        ],
+        if (snapshot == null && !showSignIn && state.loading)
           _LoadingBody(t: t)
-        else if (snapshot == null && error != null)
-          _StatusBody(error: error, t: t)
+        else if (snapshot == null && !showSignIn && error != null)
+          _StatusBody(title: error.title, message: error.message, t: t)
         else if (snapshot != null) ...[
-          if (snapshot.stale)
+          // The sign-in block above already says why the meters are grey.
+          // (After a sign-in the error is cleared while the next probe runs;
+          // the stale meters then sit for that second without a banner.)
+          if (snapshot.stale && error != null && !showSignIn)
             _OfflineRow(
               t: t,
-              message: '${error?.staleReason ?? 'Offline'} — showing last sync',
+              message: '${error.staleReason} — showing last sync',
             ),
           MeterRow(
             window: snapshot.session,
@@ -206,11 +228,24 @@ class _OfflineRow extends StatelessWidget {
   }
 }
 
+/// A status card: amber dot (or [leading]) + heading, a body line, and an
+/// optional row of [actions].
 class _StatusBody extends StatelessWidget {
-  final UsageError error;
+  final String title;
+  final String message;
   final ClaudeTokens t;
 
-  const _StatusBody({required this.error, required this.t});
+  /// Replaces the amber dot, e.g. with a spinner while waiting.
+  final Widget? leading;
+  final List<Widget> actions;
+
+  const _StatusBody({
+    required this.title,
+    required this.message,
+    required this.t,
+    this.leading,
+    this.actions = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -221,31 +256,184 @@ class _StatusBody extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: t.amber,
-                  shape: BoxShape.circle,
+              SizedBox(
+                width: 10,
+                height: 10,
+                child: Center(
+                  child: leading ??
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: t.amber,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
                 ),
               ),
-              const SizedBox(width: 9),
-              Text(
-                error.title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: t.text1,
+              // 10 + 7 keeps the heading where the old 8pt dot + 9 put it.
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: t.text1,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            error.message,
+            message,
             style: TextStyle(fontSize: 12, height: 1.45, color: t.text2),
           ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 6, runSpacing: 6, children: actions),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// The signed-out card: what happened and a one-click way back — "Sign in…"
+/// runs the CLI's browser sign-in headless, "Use Terminal" the same sign-in
+/// in a Terminal window — then, while one runs, what to finish and a Cancel.
+/// Either way usage refreshes by itself the moment the sign-in lands.
+class _SignInBlock extends ConsumerWidget {
+  /// The usage error that brought the card up; null in the moment between a
+  /// sign-in starting and the next probe.
+  final UsageError? error;
+  final ClaudeTokens t;
+
+  const _SignInBlock({required this.error, required this.t});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final signIn = ref.watch(signInControllerProvider);
+    final controller = ref.read(signInControllerProvider.notifier);
+
+    final Widget body;
+    if (signIn.inProgress) {
+      final inTerminal = signIn.phase == SignInPhase.terminal;
+      body = _StatusBody(
+        t: t,
+        leading: SizedBox(
+          width: 10,
+          height: 10,
+          child: CircularProgressIndicator(strokeWidth: 1.5, color: t.text3),
+        ),
+        title: 'Waiting for sign-in…',
+        message: inTerminal
+            ? 'A Terminal window is open — finish signing in there, and '
+                'ClaudeBar refreshes on its own.'
+            // The headless flow can't take a pasted code (the page offers one
+            // only if its hand-back to the CLI fails), so point at the route
+            // that can — one tap away below.
+            : 'Your browser should be open — finish signing in there, and '
+                'ClaudeBar refreshes on its own. Asked to paste a code? Use '
+                'Terminal instead.',
+        actions: [
+          _ActionBtn(label: 'Cancel', onTap: controller.cancel, t: t),
+          if (!inTerminal)
+            _ActionBtn(
+              label: 'Use Terminal',
+              onTap: () => controller.signIn(terminal: true),
+              t: t,
+            ),
+        ],
+      );
+    } else {
+      final failure = signIn.error;
+      final shown = error ?? UsageError.noCredentials;
+      body = _StatusBody(
+        t: t,
+        title: shown.title,
+        message: failure ?? shown.message,
+        actions: [
+          _ActionBtn(
+            label: failure == null ? 'Sign in…' : 'Try again',
+            primary: true,
+            onTap: controller.signIn,
+            t: t,
+          ),
+          _ActionBtn(
+            label: 'Use Terminal',
+            onTap: () => controller.signIn(terminal: true),
+            t: t,
+          ),
+        ],
+      );
+    }
+    return body;
+  }
+}
+
+/// A compact text button for a status card's actions: accent-tinted for the
+/// primary one, plain for the rest (same hover/press feel as [_FootBtn]).
+class _ActionBtn extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+  final ClaudeTokens t;
+
+  const _ActionBtn({
+    required this.label,
+    required this.onTap,
+    required this.t,
+    this.primary = false,
+  });
+
+  @override
+  State<_ActionBtn> createState() => _ActionBtnState();
+}
+
+class _ActionBtnState extends State<_ActionBtn> {
+  bool _hover = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.t;
+    final Color fg;
+    final Color bg;
+    if (widget.primary) {
+      fg = t.accent;
+      bg = t.accent.withValues(alpha: _pressed ? 0.30 : (_hover ? 0.22 : 0.15));
+    } else {
+      fg = _hover ? t.text1 : t.text2;
+      bg = _pressed ? t.track : (_hover ? t.hairline : const Color(0x00000000));
+    }
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 90),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: widget.primary ? FontWeight.w600 : FontWeight.w500,
+              color: fg,
+            ),
+          ),
+        ),
       ),
     );
   }

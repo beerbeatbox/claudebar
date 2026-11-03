@@ -26,4 +26,24 @@ void main() {
       expect(UsageError.noData.kind, isNot(UsageErrorKind.parseFailed));
     });
   });
+
+  group('UsageError.needsSignIn', () {
+    test('only a signed-out CLI asks for a sign-in', () {
+      expect(UsageError.noCredentials.needsSignIn, isTrue);
+      for (final other in [
+        UsageError.cliMissing,
+        UsageError.network,
+        UsageError.noData,
+        UsageError.parseFailed,
+      ]) {
+        expect(other.needsSignIn, isFalse, reason: other.kind.name);
+      }
+    });
+
+    test('says so in the menu bar and names the state in the popover', () {
+      expect(UsageError.noCredentials.menuBarLabel, 'Sign in');
+      expect(UsageError.noCredentials.title, 'Claude Code is signed out');
+      expect(UsageError.noCredentials.staleReason, 'Signed out');
+    });
+  });
 }

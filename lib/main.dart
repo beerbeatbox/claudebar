@@ -16,6 +16,7 @@ import 'state/usage_controller.dart';
 import 'ui/popover_panel.dart';
 
 late final PopoverWindow _popover;
+late final ProviderContainer _container;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +24,7 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  final container = ProviderContainer(
+  final container = _container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
@@ -70,6 +71,9 @@ Future<void> main() async {
 
 /// Quits the whole app (used by the popover's Settings → Quit).
 Future<void> quitApp() async {
+  // exit() doesn't take child processes with it — stop a headless sign-in
+  // first (see TrayController._quit).
+  _container.read(cliUsageSourceProvider).cancelSignIn();
   await trayManager.destroy();
   exit(0);
 }

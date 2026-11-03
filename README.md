@@ -61,6 +61,20 @@ eliminates). If a probe fails, the app says exactly why instead: Claude Code
 not installed, signed out, offline (keeps showing the last reading), or
 "/usage" output changed shape (check for a ClaudeBar update).
 
+### Signed out? One click back
+
+The `claude` CLI signs in separately from Claude Desktop, so its login can
+expire while the desktop app looks perfectly fine. ClaudeBar treats that as
+the one failure you can fix on the spot: the menu bar switches to **Sign in**
+(instead of a grey, still-ticking old reading), and the popover and the
+right-click menu offer **Sign in…**. That runs `claude auth login` in the
+background; the CLI opens your browser, you approve, and ClaudeBar refreshes
+the moment the CLI reports success. **Use Terminal** runs the same sign-in in
+a Terminal window instead, for when the browser hand-off can't complete (for
+example, if the page asks you to paste a code). Either way the new token goes
+into Claude Code's own Keychain item, written by the CLI; ClaudeBar never
+reads or writes it.
+
 ---
 
 ## Architecture
@@ -73,10 +87,11 @@ lib/
 │   ├── tray_controller.dart    # status-item title (%) + context menu
 │   └── measure_size.dart       # size the window to its content
 ├── data/
-│   └── cli_usage_source.dart   # spawn `claude -p "/usage"` → UsageSnapshot, classify failures
+│   └── cli_usage_source.dart   # spawn `claude -p "/usage"` → UsageSnapshot, classify failures; `claude auth login`
 ├── models/                     # usage_window, usage_snapshot, usage_error
 ├── state/
-│   └── usage_controller.dart   # Riverpod Notifier: refresh timer + snapshot/error
+│   ├── usage_controller.dart   # Riverpod Notifier: refresh timer + snapshot/error
+│   └── sign_in_controller.dart # "Sign in…" for a signed-out CLI → refresh on success
 ├── settings/
 │   └── prefs.dart              # interval, menu-bar metric, launch-at-login
 └── ui/                         # tokens, popover_panel, meter_row, plan_badge, settings_panel

@@ -3,6 +3,8 @@
 // re-runs build — which used to return loading() (snapshot = null), making
 // the menu-bar title flash "–" until the next fetch landed.
 
+import 'dart:async';
+
 import 'package:claude_usage_bar/data/cli_usage_source.dart';
 import 'package:claude_usage_bar/models/usage_error.dart';
 import 'package:claude_usage_bar/models/usage_snapshot.dart';
@@ -27,6 +29,28 @@ class _FlakyCliSource extends CliUsageSource {
       weekly: const UsageWindow(percent: 28, label: 'Weekly · 7d'),
       plan: 'Max',
       fetchedAt: DateTime(2026, 6, 12, 22, 5),
+    ));
+  }
+}
+
+/// The first probe hangs on [gate] and then reports "signed out" — a probe
+/// that was already running when the user signed in. Later probes succeed.
+class _GatedCliSource extends CliUsageSource {
+  final gate = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<CliUsageResult> fetch() async {
+    calls++;
+    if (calls == 1) {
+      await gate.future;
+      return const CliUsageResult.fail(UsageError.noCredentials);
+    }
+    return CliUsageResult.ok(UsageSnapshot(
+      session: const UsageWindow(percent: 35, label: 'Session · 5h'),
+      weekly: const UsageWindow(percent: 28, label: 'Weekly · 7d'),
+      plan: 'Max',
+      fetchedAt: DateTime(2026, 11, 3, 12, 0),
     ));
   }
 }
@@ -113,6 +137,69 @@ void main() {
     container.read(usageControllerProvider.notifier).refreshIfDue();
     await Future<void>.delayed(Duration.zero);
     expect(cli.calls, 2);
+  });
+
+  test('refreshAfterSignIn fetches even inside the success cooldown',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cli = _FakeCliSource();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        cliUsageSourceProvider.overrideWithValue(cli),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(usageControllerProvider);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(usageControllerProvider).locked, isTrue);
+
+    final notifier = container.read(usageControllerProvider.notifier);
+    await notifier.refresh();
+    expect(cli.calls, 1, reason: 'a plain refresh honours the cooldown');
+
+    notifier.refreshAfterSignIn();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(cli.calls, 2, reason: 'a fresh sign-in is worth a fetch right now');
+  });
+
+  // A probe that started before the sign-in finished reports the old
+  // signed-out state; dropping the post-sign-in refresh behind it would leave
+  // the menu bar on "Sign in" until the error backoff came round.
+  test('a sign-in landing mid-probe refreshes again once that probe ends',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cli = _GatedCliSource();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        cliUsageSourceProvider.overrideWithValue(cli),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(usageControllerProvider);
+    await Future<void>.delayed(Duration.zero);
+    expect(cli.calls, 1, reason: 'first probe is in flight');
+
+    container.read(usageControllerProvider.notifier).refreshAfterSignIn();
+    expect(container.read(usageControllerProvider).needsSignIn, isFalse,
+        reason: 'the sign-in prompt goes away at once');
+
+    cli.gate.complete();
+    for (var i = 0; i < 6; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final state = container.read(usageControllerProvider);
+    expect(cli.calls, 2);
+    expect(state.error, isNull);
+    expect(state.snapshot?.session.percent, 35);
   });
 
   // The fetch gate means a noData reply is the latest reading the CLI can give,

@@ -9,6 +9,7 @@ import 'package:tray_manager/tray_manager.dart';
 
 import '../models/usage_window.dart';
 import '../settings/prefs.dart';
+import '../state/sign_in_controller.dart';
 import '../state/usage_controller.dart';
 import '../ui/format.dart';
 import '../ui/tokens.dart';
@@ -60,10 +61,12 @@ class TrayController with TrayListener {
     _recoveryChannel.setMethodCallHandler(_onRecoveryCall);
     await _rebuild();
 
-    // Re-render whenever usage, the chosen metric, or a pending update changes.
+    // Re-render whenever usage, the chosen metric, a pending update, or a
+    // running sign-in changes.
     container.listen(usageControllerProvider, (_, __) => _rebuild(), fireImmediately: false);
     container.listen(settingsProvider, (_, __) => _rebuild(), fireImmediately: false);
     container.listen(pendingUpdateProvider, (_, __) => _rebuild(), fireImmediately: false);
+    container.listen(signInControllerProvider, (_, __) => _rebuild(), fireImmediately: false);
 
     // The title carries a minute-granular reset countdown, so tick it along
     // between refreshes (design mockup variant G: ring + "2h14m"). The tick
@@ -215,6 +218,15 @@ class TrayController with TrayListener {
   }
 
   String _title(UsageState state, MenuBarMetric metric) {
+    // Signed out outranks the countdown: a kept reading would otherwise sit
+    // there in grey, still ticking down, never saying the one thing that
+    // fixes it — exactly how an expired Claude Code login went unnoticed.
+    // Mid-sign-in it says so, since the popover closes as the browser opens.
+    if (state.needsSignIn) {
+      return container.read(signInControllerProvider).inProgress
+          ? 'Signing in…'
+          : state.error!.menuBarLabel;
+    }
     final snapshot = state.snapshot;
     if (snapshot != null) {
       final window = metric == MenuBarMetric.weekly ? snapshot.weekly : snapshot.session;
@@ -252,6 +264,17 @@ class TrayController with TrayListener {
       items.add(_readonly('Loading…'));
     }
 
+    // Signed out: the fix is one click away, right here in the menu.
+    final signIn = container.read(signInControllerProvider);
+    if (signIn.inProgress) {
+      items.add(_readonly(signIn.phase == SignInPhase.terminal
+          ? 'Signing in — finish in Terminal…'
+          : 'Signing in — finish in your browser…'));
+      items.add(MenuItem(key: 'cancel-sign-in', label: 'Cancel Sign-in'));
+    } else if (state.needsSignIn) {
+      items.add(MenuItem(key: 'sign-in', label: 'Sign in to Claude Code…'));
+    }
+
     items.add(MenuItem.separator());
     items.add(MenuItem(key: 'open', label: 'Open ClaudeBar'));
     items.add(MenuItem(key: 'refresh', label: 'Refresh'));
@@ -287,7 +310,9 @@ class TrayController with TrayListener {
   void onTrayIconMouseDown() {
     // Opening the popover is the moment the numbers are actually read, so make
     // sure they aren't a stale leftover from a suspended timer.
-    container.read(usageControllerProvider.notifier).refreshIfDue();
+    container
+        .read(usageControllerProvider.notifier)
+        .refreshIfDue(userLooking: true);
     popover.toggle();
   }
 
@@ -298,11 +323,21 @@ class TrayController with TrayListener {
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
       case 'open':
-        container.read(usageControllerProvider.notifier).refreshIfDue();
+        container
+            .read(usageControllerProvider.notifier)
+            .refreshIfDue(userLooking: true);
         popover.show();
         break;
       case 'refresh':
         container.read(usageControllerProvider.notifier).refresh();
+        break;
+      case 'sign-in':
+        // The CLI opens the browser itself; no popover needed (it would hide
+        // the moment the browser takes focus anyway).
+        container.read(signInControllerProvider.notifier).signIn();
+        break;
+      case 'cancel-sign-in':
+        container.read(signInControllerProvider.notifier).cancel();
         break;
       case 'check-updates':
         // User-initiated: Sparkle activates the app so its dialog surfaces even
@@ -322,6 +357,9 @@ class TrayController with TrayListener {
   Future<void> _quit() async {
     _countdownTimer?.cancel();
     _recoverDebounce?.cancel();
+    // exit() doesn't take child processes with it: a headless `auth login`
+    // would linger, still holding its localhost callback port.
+    container.read(cliUsageSourceProvider).cancelSignIn();
     await trayManager.destroy();
     exit(0);
   }

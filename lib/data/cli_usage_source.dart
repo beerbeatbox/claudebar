@@ -20,6 +20,64 @@ class CliUsageResult {
   bool get isOk => snapshot != null;
 }
 
+/// Everything one finished `claude` run handed back. Kept whole — not just
+/// stdout-on-success — because some answers arrive with a non-zero exit:
+/// `claude auth status` exits 1 precisely when Claude Code is signed out, and
+/// still prints the JSON that says so.
+class CliOutput {
+  final int exitCode;
+  final String stdout;
+  final String stderr;
+
+  const CliOutput(this.exitCode, this.stdout, [this.stderr = '']);
+
+  bool get ok => exitCode == 0;
+}
+
+/// Runs `claude` with the given args and returns what it printed, or null
+/// when it couldn't be run at all. The real source spawns the binary; tests
+/// inject a fake (see [CliUsageSource.withRunner]) so failure classification
+/// can be exercised without Claude Code installed.
+typedef CliRunner = Future<CliOutput?> Function(List<String> args);
+
+/// How a "Sign in…" attempt ended (see [CliUsageSource.signIn]).
+enum SignInOutcome { signedIn, cancelled, failed }
+
+class SignInResult {
+  final SignInOutcome outcome;
+
+  /// Why it failed, phrased for the popover. Null unless [outcome] is
+  /// [SignInOutcome.failed].
+  final String? message;
+
+  const SignInResult._(this.outcome, [this.message]);
+
+  const SignInResult.failed(String message)
+    : this._(SignInOutcome.failed, message);
+
+  static const signedIn = SignInResult._(SignInOutcome.signedIn);
+  static const cancelled = SignInResult._(SignInOutcome.cancelled);
+}
+
+/// One sign-in attempt, so a cancel — or a newer attempt — stops exactly it.
+class _SignInAttempt {
+  bool cancelled = false;
+  Process? process;
+
+  void cancel() {
+    cancelled = true;
+    final proc = process;
+    if (proc != null) _terminate(proc);
+  }
+}
+
+/// SIGTERM first so the CLI can close its localhost callback listener, then
+/// SIGKILL in case it ignored that.
+void _terminate(Process proc) {
+  proc.kill();
+  Timer(const Duration(seconds: 3), () => proc.kill(ProcessSignal.sigkill));
+}
+
 /// Fetches usage by spawning `claude -p "/usage" --output-format json` —
 /// the app's only usage source.
 ///
@@ -35,9 +93,29 @@ class CliUsageResult {
 /// mask a CLI format change (and quietly bring the password prompts back),
 /// so failures are classified instead — see [_classifyFailure].
 class CliUsageSource {
-  CliUsageSource({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  CliUsageSource({DateTime Function()? now}) : this._(now: now);
+
+  /// A source whose CLI runs are answered by [runner] instead of a spawned
+  /// binary — hermetic, so it is exempt from the FLUTTER_TEST guard.
+  @visibleForTesting
+  CliUsageSource.withRunner(CliRunner runner, {DateTime Function()? now})
+    : this._(now: now, runner: runner);
+
+  CliUsageSource._({DateTime Function()? now, CliRunner? runner})
+    : _now = now ?? DateTime.now,
+      _runner = runner;
 
   final DateTime Function() _now;
+
+  /// Test seam: when set, it answers every CLI run (and stands in for
+  /// finding the binary).
+  final CliRunner? _runner;
+
+  /// flutter_tester would happily spawn the real CLI on the dev machine, so
+  /// anything that would is short-circuited there — unless a fake runner
+  /// was injected, which is hermetic already.
+  bool get _underTest =>
+      _runner == null && Platform.environment['FLUTTER_TEST'] == 'true';
 
   /// Resolved path of the `claude` binary. Null = not searched yet, empty =
   /// searched and absent (so the candidates are only walked once per run).
@@ -63,10 +141,9 @@ class CliUsageSource {
   /// Returns a fresh snapshot, or a [UsageError] describing why the probe
   /// failed — classified so the UI can say the right thing for each cause.
   Future<CliUsageResult> fetch() async {
-    // flutter_tester would happily spawn the real CLI on the dev machine —
-    // keep widget tests hermetic. noCredentials renders the same harmless
+    // Keep widget tests hermetic. noCredentials renders the same harmless
     // "Sign in" state tests saw before.
-    if (Platform.environment['FLUTTER_TEST'] == 'true') {
+    if (_underTest) {
       return const CliUsageResult.fail(UsageError.noCredentials);
     }
 
@@ -74,8 +151,16 @@ class CliUsageSource {
       return const CliUsageResult.fail(UsageError.cliMissing);
     }
 
-    final out = await _run(['-p', '/usage', '--output-format', 'json']);
+    final probe = await _exec(['-p', '/usage', '--output-format', 'json']);
+    final out = probe != null && probe.ok ? probe.stdout : null;
     String? text;
+    // What the CLI itself said when it failed — an error envelope's result, or
+    // a failed run's output — for spotting a dead login. Never a clean run's
+    // stray output: an MCP server grumbling about ITS OWN login there must
+    // not send the user off to re-sign-in Claude Code.
+    final complaints = <String>[
+      if (probe != null && !probe.ok) ...[probe.stdout, probe.stderr],
+    ];
     // True once the CLI hands back a successful envelope with a string result —
     // i.e. it ran fine and answered. Distinguishes "answered but no usage lines"
     // (a transient empty reply → noData) from "the CLI itself failed" (offline /
@@ -94,6 +179,7 @@ class CliUsageSource {
         Diag.log('usage envelope is_error='
             '${envelope['is_error']} subtype=${envelope['subtype']} '
             'result=${_snippet('${envelope['result']}')}');
+        complaints.add('${envelope['result']}');
       }
       if (envelope != null && envelope['is_error'] != true) {
         final result = envelope['result'];
@@ -116,7 +202,12 @@ class CliUsageSource {
       if (snapshot != null) return CliUsageResult.ok(snapshot);
       Diag.log('usage text unparsable: ${_snippet(text)}');
     }
-    return CliUsageResult.fail(await _classifyFailure(gotReply: gotReply));
+    return CliUsageResult.fail(await _classifyFailure(
+      gotReply: gotReply,
+      // A CLI that knows its login is dead says so in its own reply or error
+      // ("… · Please run /login").
+      reply: [if (text != null) text, ...complaints].join('\n'),
+    ));
   }
 
   /// First [max] characters of [raw], newlines flattened — enough to identify
@@ -128,13 +219,24 @@ class CliUsageSource {
 
   /// Runs only when a probe failed (rare): works out *why*, so each cause
   /// gets the right message instead of a generic error. [gotReply] means the
-  /// CLI answered with a string result that simply lacked the usage lines.
-  Future<UsageError> _classifyFailure({required bool gotReply}) async {
+  /// CLI answered with a string result that simply lacked the usage lines;
+  /// [reply] is what the CLI itself said (its reply, or its error), for
+  /// spotting a dead login.
+  Future<UsageError> _classifyFailure({
+    required bool gotReply,
+    required String reply,
+  }) async {
     // Signed out? `auth status` is answered locally, so it works offline.
-    final out = await _run(['auth', 'status', '--json']);
-    if (out != null && decodeEnvelope(out)?['loggedIn'] == false) {
-      return UsageError.noCredentials;
-    }
+    // This is also where an EXPIRED login lands: when the CLI's refresh token
+    // is rejected it wipes the stored token, after which it reads as signed
+    // out — so one check covers "never signed in", "signed out" and "login
+    // expired". (Claude Desktop signs in separately and can look perfectly
+    // healthy meanwhile, which is how this goes unnoticed.)
+    final status = await _authStatus();
+    if (status?['loggedIn'] == false) return UsageError.noCredentials;
+    // Signed in on paper, but the CLI itself says the login is no good — a
+    // revoked token it hasn't wiped yet.
+    if (mentionsSignIn(reply)) return UsageError.noCredentials;
     // The CLI answered, we're signed in — it just didn't carry the numbers
     // (the print-mode /usage probe often returns its preamble before the
     // fetch lands). That's the common transient case, distinct from a genuine
@@ -151,6 +253,32 @@ class CliUsageSource {
     // Online, signed in, CLI present, but produced no parsable reply at all —
     // the output shape must have changed.
     return UsageError.parseFailed;
+  }
+
+  /// Phrases Claude Code uses when its own login is the problem — `Not
+  /// logged in · Please run /login`, `OAuth token revoked · Please run
+  /// /login`, `Login expired · Please run /login`, `Not logged in. Run claude
+  /// auth login to authenticate.`, or an API `authentication_error`.
+  /// Deliberately narrow: a bare "not logged in" could be anything's login
+  /// (every Claude Code message with it also names `/login` or `claude auth
+  /// login`), and "could not refresh your login because another Claude Code
+  /// process is refreshing it" is a transient lock — neither is a reason to
+  /// send anyone off to sign in again.
+  static const _signInMarkers = [
+    'run /login',
+    'login expired',
+    'oauth token revoked',
+    'oauth token has expired',
+    'run claude auth login',
+    'authentication_error',
+  ];
+
+  /// True when [reply] is the CLI saying its login is dead (see
+  /// [_signInMarkers]).
+  @visibleForTesting
+  static bool mentionsSignIn(String reply) {
+    final lower = reply.toLowerCase();
+    return _signInMarkers.any(lower.contains);
   }
 
   // ---- parsing (pure, unit-tested) ----
@@ -324,7 +452,12 @@ class CliUsageSource {
 
   // ---- process plumbing ----
 
-  Future<String?> _run(List<String> args) async {
+  /// Runs `claude` with [args] to completion (or [_timeout]) and returns what
+  /// it printed WHATEVER the exit code — callers decide what a non-zero exit
+  /// means. Null only when the CLI couldn't be run at all.
+  Future<CliOutput?> _exec(List<String> args) async {
+    final runner = _runner;
+    if (runner != null) return runner(args);
     final bin = await _resolveBinary();
     if (bin == null) return null;
     // Bracket every child process we spawn on the diagnostic timeline. The
@@ -349,24 +482,39 @@ class CliUsageSource {
         return -1;
       });
       final out = await outF;
+      final err = await errF;
       Diag.log('probe done: ${args.first} exit=$exit');
-      if (exit != 0) {
+      if (exit != 0 && err.trim().isNotEmpty) {
         // Diag, not debugPrint: debugPrint is stripped from release builds,
         // which is exactly where a user's failing probe needs explaining.
-        Diag.log('probe stderr: ${args.first} — ${_snippet((await errF).trim())}');
-        return null;
+        Diag.log('probe stderr: ${args.first} — ${_snippet(err.trim())}');
       }
-      return out;
+      return CliOutput(exit, out, err);
     } catch (e) {
       Diag.log('probe failed: ${args.first} — $e');
       return null;
     }
   }
 
+  /// `claude auth status --json`, decoded — null when the probe couldn't run
+  /// or printed nothing JSON-shaped.
+  ///
+  /// Read whatever the exit code: the CLI ends this command with
+  /// `exit(loggedIn ? 0 : 1)`, so the one answer that says "signed out"
+  /// always arrives as a FAILED run. Dropping non-zero runs, as every probe
+  /// here used to, threw exactly that answer away — so an expired Claude Code
+  /// login showed up as "No fresh reading" / "Couldn't read usage", with
+  /// nothing pointing at the actual fix (sign in again).
+  Future<Map<String, dynamic>?> _authStatus() async {
+    final out = await _exec(['auth', 'status', '--json']);
+    return out == null ? null : decodeEnvelope(out.stdout);
+  }
+
   /// Finds the `claude` binary once per run: well-known install locations
   /// first, then a login shell as the last resort (GUI apps don't inherit
   /// the user's PATH).
   Future<String?> _resolveBinary() async {
+    if (_runner != null) return 'claude';
     final cached = _binary;
     if (cached != null) return cached.isEmpty ? null : cached;
 
@@ -478,8 +626,7 @@ class CliUsageSource {
   /// extra spawn costs ~half a second alongside the /usage probe itself. On a
   /// failed probe the last good label is kept ("Claude" before the first).
   Future<String> _planLabel() async {
-    final out = await _run(['auth', 'status', '--json']);
-    final sub = out == null ? null : decodeEnvelope(out)?['subscriptionType'];
+    final sub = (await _authStatus())?['subscriptionType'];
     if (sub is! String || sub.isEmpty) return _plan ?? 'Claude';
     return _plan = sub[0].toUpperCase() + sub.substring(1).toLowerCase();
   }
@@ -507,5 +654,219 @@ class CliUsageSource {
     } catch (e) {
       debugPrint('[ClaudeBar] probe session cleanup failed: $e');
     }
+  }
+
+  // ---- sign-in ----
+
+  /// How long a browser sign-in may sit unfinished before ClaudeBar gives up
+  /// on it. Generous — 2FA and SSO take a while — and Cancel is always there.
+  static const _signInTimeout = Duration(minutes: 10);
+
+  /// The same for a sign-in running in a Terminal window.
+  static const _terminalSignInTimeout = Duration(minutes: 15);
+
+  /// The sign-in in flight, if any — at most one at a time.
+  _SignInAttempt? _signIn;
+
+  /// Signs Claude Code back in by running `claude auth login` headless.
+  ///
+  /// No terminal needed: the CLI opens the browser itself and waits on a
+  /// localhost callback, so the user approves in the browser, the CLI stores
+  /// the new token in its own Keychain item (ClaudeBar still never touches
+  /// it), prints "Login successful." and exits 0. Without a TTY the CLI
+  /// never switches to its paste-a-code prompt, and closing stdin only
+  /// aborts that TTY flow — so stdin is simply left open and unused.
+  Future<SignInResult> signIn() async {
+    if (_underTest) {
+      return const SignInResult.failed('Sign-in isn’t available in tests.');
+    }
+    final bin = await _resolveBinary();
+    if (bin == null) return SignInResult.failed(UsageError.cliMissing.message);
+
+    cancelSignIn();
+    final attempt = _signIn = _SignInAttempt();
+    Diag.log('sign-in start: auth login (browser)');
+    try {
+      final proc = await Process.start(
+        bin,
+        ['auth', 'login'],
+        workingDirectory: _ensureProbeDir(),
+        // Same sanitised environment as the probes (see childEnvironment).
+        environment: childEnvironment(),
+        includeParentEnvironment: false,
+      );
+      attempt.process = proc;
+      if (attempt.cancelled) _terminate(proc); // cancelled while spawning
+      final outF = proc.stdout.transform(utf8.decoder).join();
+      final errF = proc.stderr.transform(utf8.decoder).join();
+      var timedOut = false;
+      final exit = await proc.exitCode.timeout(_signInTimeout, onTimeout: () {
+        timedOut = true;
+        _terminate(proc);
+        return -1;
+      });
+      await outF; // stdout carries the sign-in URL — drained, never logged
+      final err = await errF;
+      try {
+        await proc.stdin.close();
+      } catch (_) {}
+      Diag.log('sign-in done: exit=$exit'
+          '${attempt.cancelled ? ' (cancelled)' : ''}'
+          '${timedOut ? ' (timed out)' : ''}');
+      if (attempt.cancelled) return SignInResult.cancelled;
+      if (exit == 0) return SignInResult.signedIn;
+      if (timedOut) {
+        return const SignInResult.failed(
+            'Sign-in timed out. Try again when you’re ready.');
+      }
+      if (err.trim().isNotEmpty) {
+        Diag.log('sign-in stderr: ${_snippet(err.trim())}');
+      }
+      return SignInResult.failed(loginFailureMessage(err, exit));
+    } catch (e) {
+      Diag.log('sign-in failed to start: $e');
+      return const SignInResult.failed('Couldn’t start Claude Code’s sign-in.');
+    } finally {
+      if (identical(_signIn, attempt)) _signIn = null;
+    }
+  }
+
+  /// The fallback when the browser hand-off can't finish by itself (say the
+  /// sign-in page shows a code to paste): opens Terminal running `claude auth
+  /// login`, then waits for the script to hand the CLI's exit code back.
+  ///
+  /// A `.command` file opened with `open -a Terminal` runs in a new window
+  /// without the Automation permission prompt that scripting Terminal through
+  /// osascript would trigger. It lives in a fresh private temp directory —
+  /// not world-writable /tmp — because ClaudeBar is about to execute it.
+  Future<SignInResult> signInInTerminal() async {
+    if (_underTest) {
+      return const SignInResult.failed('Sign-in isn’t available in tests.');
+    }
+    final bin = await _resolveBinary();
+    if (bin == null) return SignInResult.failed(UsageError.cliMissing.message);
+
+    cancelSignIn();
+    final attempt = _signIn = _SignInAttempt();
+    Directory? dir;
+    try {
+      dir = await Directory.systemTemp.createTemp('claudebar-sign-in-');
+      final script = File('${dir.path}/Sign in to Claude Code.command');
+      final exitCodeFile = File('${dir.path}/exit-code');
+      await script.writeAsString(
+          signInScript(claude: bin, exitCodeFile: exitCodeFile.path));
+      final chmod = await Process.run('/bin/chmod', ['700', script.path]);
+      if (chmod.exitCode != 0) {
+        Diag.log('sign-in (Terminal): chmod failed — ${chmod.stderr}');
+        return const SignInResult.failed(
+            'Couldn’t prepare the Terminal sign-in.');
+      }
+      final open = await Process.run(
+        '/usr/bin/open',
+        ['-a', 'Terminal', script.path],
+        environment: childEnvironment(),
+        includeParentEnvironment: false,
+      );
+      if (open.exitCode != 0) {
+        Diag.log('sign-in (Terminal): open failed — ${open.stderr}');
+        return const SignInResult.failed('Couldn’t open Terminal.');
+      }
+      Diag.log('sign-in start: auth login (Terminal)');
+
+      final deadline = DateTime.now().add(_terminalSignInTimeout);
+      while (!attempt.cancelled) {
+        // The script renames the finished file into place, so a parsable
+        // code means it's complete; anything else just isn't there yet.
+        if (await exitCodeFile.exists()) {
+          final code = int.tryParse((await exitCodeFile.readAsString()).trim());
+          if (code != null) {
+            Diag.log('sign-in done (Terminal): exit=$code');
+            return code == 0
+                ? SignInResult.signedIn
+                : const SignInResult.failed(
+                    'The Terminal sign-in didn’t finish. Try again.');
+          }
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          return const SignInResult.failed(
+              'Timed out waiting for the Terminal sign-in.');
+        }
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      return SignInResult.cancelled;
+    } catch (e) {
+      Diag.log('sign-in (Terminal) failed: $e');
+      return const SignInResult.failed('Couldn’t start the Terminal sign-in.');
+    } finally {
+      if (identical(_signIn, attempt)) _signIn = null;
+      try {
+        await dir?.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+
+  /// Stops the sign-in in flight, if any: kills a headless `auth login`, or
+  /// stops waiting on a Terminal one (that window is the user's to close).
+  void cancelSignIn() {
+    _signIn?.cancel();
+    _signIn = null;
+  }
+
+  /// The popover line for a failed `claude auth login` — the CLI's own
+  /// `Login failed: <reason>` when it gave one.
+  @visibleForTesting
+  static String loginFailureMessage(String stderr, int exitCode) {
+    final reason =
+        RegExp(r'Login failed:\s*(.+)').firstMatch(stderr)?.group(1)?.trim();
+    if (reason != null && reason.isNotEmpty) {
+      return 'Sign-in didn’t finish: ${_snippet(reason, 160)}';
+    }
+    final lines = stderr
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.isNotEmpty) {
+      return 'Sign-in didn’t finish: ${_snippet(lines.last, 160)}';
+    }
+    return 'Sign-in didn’t finish (Claude Code exited with code $exitCode). '
+        'Try again.';
+  }
+
+  /// The zsh script the Terminal fallback runs: `claude auth login`, then the
+  /// exit code into [exitCodeFile] — written to a side file and renamed into
+  /// place so ClaudeBar never reads it half-written. Closing the window
+  /// mid-sign-in (SIGHUP) still reports a failure instead of leaving
+  /// ClaudeBar waiting out the timeout.
+  @visibleForTesting
+  static String signInScript({
+    required String claude,
+    required String exitCodeFile,
+  }) {
+    String q(String s) => "'${s.replaceAll("'", r"'\''")}'";
+    final done = q(exitCodeFile);
+    final part = q('$exitCodeFile.part');
+    return '''
+#!/bin/zsh
+# Written by ClaudeBar: signs the Claude Code CLI back in, then hands the exit
+# code back to ClaudeBar, which refreshes your usage the moment it lands.
+export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:\$PATH"
+report() { print -r -- "\$1" > $part && mv -f $part $done; }
+trap 'report 129; exit 129' HUP INT TERM
+clear 2>/dev/null
+print 'ClaudeBar — signing in to Claude Code'
+print
+${q(claude)} auth login
+code=\$?
+trap - HUP INT TERM
+report \$code
+print
+if (( code == 0 )); then
+  print 'Signed in. ClaudeBar is refreshing your usage — you can close this window.'
+else
+  print 'Sign-in didn’t finish. Close this window and try again from ClaudeBar.'
+fi
+exit \$code
+''';
   }
 }

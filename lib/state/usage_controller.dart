@@ -42,6 +42,10 @@ class UsageState {
   bool get locked =>
       lockedUntil != null && DateTime.now().isBefore(lockedUntil!);
 
+  /// Claude Code is signed out (or its login expired) — see
+  /// [UsageError.needsSignIn].
+  bool get needsSignIn => error?.needsSignIn ?? false;
+
   UsageState copyWith({
     UsageSnapshot? snapshot,
     UsageError? error,
@@ -112,6 +116,11 @@ class UsageController extends Notifier<UsageState> {
   /// only past here is a noData failure worth the "No fresh reading" banner.
   static const _staleAfter = Duration(minutes: 11);
 
+  /// When the popover opens on a signed-out reading, re-check if the last
+  /// attempt is at least this old — the user may have just signed in from
+  /// their own terminal, and the error backoff can be minutes out.
+  static const _signedOutRecheck = Duration(seconds: 10);
+
   Timer? _timer;
   Timer? _unlockTimer;
   Timer? _retryTimer;
@@ -125,6 +134,11 @@ class UsageController extends Notifier<UsageState> {
 
   /// Consecutive failed probes, indexing into [_errorBackoff].
   int _failures = 0;
+
+  /// Set when a forced refresh arrives mid-probe: that probe started before
+  /// whatever forced this one (a fresh sign-in), so its answer is already
+  /// out of date — run one more right after it instead of dropping the call.
+  bool _rerun = false;
 
   /// The configured auto-refresh interval, mirrored out of settings so the
   /// watchdog can compare against it without re-reading the provider.
@@ -163,9 +177,15 @@ class UsageController extends Notifier<UsageState> {
   /// The app, not the caller, owns the request rate: calls are dropped while
   /// a fetch is in flight, during the post-success cooldown, and during a 429
   /// backoff window — so neither button-mashing nor the periodic timer can
-  /// hammer the endpoint.
-  Future<void> refresh() async {
-    if (_inFlight || state.locked) return;
+  /// hammer the endpoint. [force] is for the one event that does warrant an
+  /// immediate fetch — Claude Code was just signed back in: it skips the
+  /// cooldown, and if a probe is in flight it runs again once that finishes.
+  Future<void> refresh({bool force = false}) async {
+    if (_inFlight) {
+      if (force) _rerun = true;
+      return;
+    }
+    if (state.locked && !force) return;
     _refreshing = true;
     _startedAt = DateTime.now();
     _lastAttempt = _startedAt;
@@ -177,7 +197,22 @@ class UsageController extends Notifier<UsageState> {
     } finally {
       _refreshing = false;
       _startedAt = null;
+      if (_rerun) {
+        _rerun = false;
+        unawaited(refresh(force: true));
+      }
     }
+  }
+
+  /// Claude Code was just signed back in: fetch right away instead of on the
+  /// error backoff, and drop the sign-in prompt now, so the popover reads
+  /// "Reading usage…" for the second the probe takes rather than offering a
+  /// sign-in that has just finished.
+  void refreshAfterSignIn() {
+    _failures = 0;
+    Diag.log('signed in — refreshing now');
+    state = state.copyWith(clearError: true);
+    refresh(force: true);
   }
 
   /// True while a probe is genuinely running. A refresh that has been in
@@ -199,14 +234,21 @@ class UsageController extends Notifier<UsageState> {
   /// a timer that fires exactly on the interval, so suspended or coalesced
   /// timers (App Nap, sleep/wake) catch up instead of skipping a cycle.
   /// Also called when the popover opens and on the tray's minute tick, so the
-  /// data is current the moment the user looks at it.
-  void refreshIfDue() {
+  /// data is current the moment the user looks at it. [userLooking] marks the
+  /// popover-open calls: on a signed-out reading those re-check within
+  /// [_signedOutRecheck], since the user may have signed in some other way
+  /// (their own terminal, `/login` in a session) and is looking to see it.
+  void refreshIfDue({bool userLooking = false}) {
     final last = _lastAttempt;
     if (last == null) {
       refresh();
       return;
     }
     final elapsed = DateTime.now().difference(last);
+    if (userLooking && state.needsSignIn && elapsed >= _signedOutRecheck) {
+      refresh();
+      return;
+    }
     if (elapsed < _interval) return;
     // A gap well past the interval means the timers were frozen (App Nap,
     // sleep/wake) — worth naming, since the probe lines alone just look like a

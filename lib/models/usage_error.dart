@@ -8,7 +8,12 @@ enum UsageErrorKind {
   /// The `claude` binary couldn't be found on this machine.
   cliMissing,
 
-  /// The CLI is installed but reports it isn't signed in.
+  /// The CLI is installed but isn't signed in — never was, was signed out,
+  /// or its login expired (the CLI wipes a token it can no longer refresh,
+  /// after which it reads as signed out). Claude Desktop signs in on its own,
+  /// so the desktop app can look perfectly healthy meanwhile — which is why
+  /// this state gets a loud "Sign in" and a one-click fix rather than a grey
+  /// stale reading.
   noCredentials,
 
   /// The CLI ran but couldn't reach Anthropic (machine offline, or the API
@@ -37,6 +42,10 @@ class UsageError {
   final String message;
 
   const UsageError(this.kind, this.message);
+
+  /// True when the fix is signing Claude Code back in — the state the popover
+  /// and the tray menu offer "Sign in…" for.
+  bool get needsSignIn => kind == UsageErrorKind.noCredentials;
 
   /// Short text for the menu-bar status item.
   String get menuBarLabel {
@@ -79,7 +88,7 @@ class UsageError {
       case UsageErrorKind.cliMissing:
         return 'Claude Code not found';
       case UsageErrorKind.noCredentials:
-        return 'Sign in to Claude Code';
+        return 'Claude Code is signed out';
       case UsageErrorKind.network:
         return 'Can’t reach Anthropic';
       case UsageErrorKind.noData:
@@ -98,7 +107,7 @@ class UsageError {
 
   static const noCredentials = UsageError(
     UsageErrorKind.noCredentials,
-    'Sign in to Claude Code — ClaudeBar will pick it up shortly, or right-click the menu-bar icon → Refresh.',
+    'ClaudeBar reads usage through the claude CLI, which isn’t signed in — its login may have expired. Claude Desktop signs in separately, so it can look fine meanwhile.',
   );
 
   static const network = UsageError(
