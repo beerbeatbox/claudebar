@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       notes:
-        description: "Release notes — Markdown bullet lines (one per line, '- …')"
+        description: "Release notes — Markdown: optional '### Changes' heading, then one '- …' bullet per line"
         required: true
         type: string
       channel:

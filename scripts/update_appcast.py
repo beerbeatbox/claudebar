@@ -3,12 +3,15 @@
 
 Run by the release workflow after sign_update produces the EdDSA signature; it
 automates the hand-edit documented in the release skill (step 5b). Release notes
-are read from the NOTES env var (Markdown bullet lines) and converted to the
-HTML list Sparkle shows in its update dialog.
+are read from the NOTES env var (Markdown: an optional heading, then bullet
+lines) and converted to the HTML list Sparkle shows in its update dialog.
+
+Self-test for the notes conversion: python3 -m doctest scripts/update_appcast.py
 """
 import argparse
 import html
 import os
+import re
 import sys
 import time
 
@@ -17,16 +20,31 @@ ANCHOR = "<language>en</language>\n"
 
 
 def notes_to_html(md: str) -> str:
+    r"""Convert Markdown release notes to the <ul> Sparkle shows.
+
+    Heading lines are dropped (the GitHub release body keeps them), every
+    remaining non-empty line becomes one <li>, and **bold** / `code` become
+    <strong> / <code>. No other Markdown is converted.
+
+    >>> print(notes_to_html("### Changes\n- **Fixes `claude` hanging** at launch"))
+    <ul><li><strong>Fixes <code>claude</code> hanging</strong> at launch</li></ul>
+    >>> print(notes_to_html('* Shows "< 1%" & no longer rounds to 0'))
+    <ul><li>Shows &quot;&lt; 1%&quot; &amp; no longer rounds to 0</li></ul>
+    """
     items = []
     for raw in md.splitlines():
         line = raw.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
         for prefix in ("- ", "* ", "• "):
             if line.startswith(prefix):
                 line = line[len(prefix):]
                 break
-        items.append(f"<li>{html.escape(line)}</li>")
+        # Escape before adding tags, so the tags themselves aren't escaped.
+        line = html.escape(line)
+        line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
+        line = re.sub(r"`([^`]+)`", r"<code>\1</code>", line)
+        items.append(f"<li>{line}</li>")
     if not items:
         return ""
     return "<ul>" + "".join(items) + "</ul>"

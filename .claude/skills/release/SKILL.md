@@ -125,13 +125,20 @@ git log v<prev>..HEAD --oneline
 ```
 
 Match the style of previous releases (`gh release view v1.2.0`):
-- Heading `### Changes`, then bullets.
+- Heading `### Changes`, then `- ` bullets, one line per bullet.
 - Bullets describe what the **user** experiences, not the code ("No more
   Keychain password pop-ups", not "add CliUsageSource"). Bold the headline
   benefit of the release in the first bullet.
 - Skip `test:`/`chore:` commits unless they matter to users.
 - Show the notes to the user for approval before publishing (step 1 covers
   this if done together with the version proposal).
+
+The same text, heading included, goes into the Release workflow's `notes`
+input when releasing from CI: the GitHub release gets it as written, and
+`scripts/update_appcast.py` turns it into the update dialog's list (heading
+lines dropped, each remaining line one bullet, `**bold**` and `` `code` ``
+rendered). Other Markdown (links, italics, nested bullets) is not converted,
+so leave it out.
 
 ## 5. Tag + GitHub release
 
