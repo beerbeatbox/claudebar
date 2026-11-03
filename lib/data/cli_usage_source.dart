@@ -482,7 +482,7 @@ class CliUsageSource {
         return -1;
       });
       final out = await outF;
-      final err = await errF;
+      final err = await _drained(errF);
       Diag.log('probe done: ${args.first} exit=$exit');
       if (exit != 0 && err.trim().isNotEmpty) {
         // Diag, not debugPrint: debugPrint is stripped from release builds,
@@ -495,6 +495,13 @@ class CliUsageSource {
       return null;
     }
   }
+
+  /// A finished run's diagnostic stream (stderr, or stdout nobody parses),
+  /// waited on only briefly: the CLI has already exited, and a detached
+  /// grandchild still holding the pipe open must never stall a probe on
+  /// output that is only ever logged.
+  static Future<String> _drained(Future<String> stream) =>
+      stream.timeout(const Duration(seconds: 2), onTimeout: () => '');
 
   /// `claude auth status --json`, decoded — null when the probe couldn't run
   /// or printed nothing JSON-shaped.
@@ -705,8 +712,9 @@ class CliUsageSource {
         _terminate(proc);
         return -1;
       });
-      await outF; // stdout carries the sign-in URL — drained, never logged
-      final err = await errF;
+      // stdout carries the sign-in URL — drained, never logged.
+      await _drained(outF);
+      final err = await _drained(errF);
       try {
         await proc.stdin.close();
       } catch (_) {}
