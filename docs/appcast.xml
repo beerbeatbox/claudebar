@@ -43,6 +43,20 @@
     <description>Most recent ClaudeBar updates.</description>
     <language>en</language>
     <item>
+      <title>Version 1.7.0</title>
+      <sparkle:version>27</sparkle:version>
+      <sparkle:shortVersionString>1.7.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[ <ul><li>**รู้ทันทีเมื่อ Claude Code หลุดล็อกอิน และล็อกอินกลับได้ในคลิกเดียว** — `claude` CLI ล็อกอินแยกกับ Claude Desktop จึงหลุดได้โดยไม่รู้ตัว ตอนนี้เมนูบาร์จะขึ้น &quot;Sign in&quot; แทนการค้างตัวเลขเก่าเป็นสีเทา</li><li>กด &quot;Sign in…&quot; ใน popover หรือเมนูคลิกขวา แล้วยืนยันในเบราว์เซอร์ ClaudeBar ดึงตัวเลขใหม่ให้ทันทีที่ล็อกอินเสร็จ ถ้าหน้าเว็บให้วางโค้ด ใช้ปุ่ม &quot;Use Terminal&quot; แทน</li><li>แก้บั๊กที่ ClaudeBar มองไม่เห็นว่า Claude Code หลุดล็อกอิน จึงขึ้นแค่ &quot;No fresh reading&quot; หรือ &quot;Couldn&#x27;t read usage&quot;</li></ul> ]]></description>
+      <pubDate>Tue, 03 Nov 2026 05:19:05 +0000</pubDate>
+      <enclosure
+        url="https://github.com/beerbeatbox/claudebar/releases/download/v1.7.0/ClaudeBar-1.7.0.zip"
+        sparkle:os="macos"
+        sparkle:edSignature="EVyC7vx7iUYKnTNVQmPMaxNwLhpP0CLnx/zdBZxC92au59BkoxRBZcdSdJAPBuNfLobk+A4ak7dO/vPvovXJAA=="
+        length="17406714"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.6.4</title>
       <sparkle:version>26</sparkle:version>
       <sparkle:shortVersionString>1.6.4</sparkle:shortVersionString>
